@@ -1,6 +1,8 @@
 package com.example.aichat.data.network
 
+import com.example.aichat.data.Config
 import com.example.aichat.data.api.OpenAiApiService
+import com.example.aichat.data.api.YandexApiService
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import okhttp3.OkHttpClient
@@ -16,6 +18,9 @@ object NetworkModule {
     
     // OpenRouter API base URL
     private const val BASE_URL = "https://openrouter.ai/api/"
+    
+    // YandexGPT API base URL
+    private const val YANDEX_BASE_URL = Config.YANDEX_API_BASE_URL
     
     /**
      * Creates and provides Gson instance for JSON serialization/deserialization
@@ -64,6 +69,27 @@ object NetworkModule {
     }
     
     /**
+     * Creates and provides Retrofit instance for YandexGPT API
+     */
+    fun provideYandexRetrofit(
+        okHttpClient: OkHttpClient,
+        gson: Gson
+    ): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(YANDEX_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+    }
+    
+    /**
+     * Creates and provides YandexApiService instance
+     */
+    fun provideYandexApiService(retrofit: Retrofit): YandexApiService {
+        return retrofit.create(YandexApiService::class.java)
+    }
+    
+    /**
      * Convenience method to create all network dependencies
      * Returns a NetworkDependencies object containing all required instances
      */
@@ -73,11 +99,15 @@ object NetworkModule {
         val retrofit = provideRetrofit(okHttpClient, gson)
         val apiService = provideOpenAiApiService(retrofit)
         
+        val yandexRetrofit = provideYandexRetrofit(okHttpClient, gson)
+        val yandexApiService = provideYandexApiService(yandexRetrofit)
+        
         return NetworkDependencies(
             gson = gson,
             okHttpClient = okHttpClient,
             retrofit = retrofit,
-            apiService = apiService
+            apiService = apiService,
+            yandexApiService = yandexApiService
         )
     }
 }
@@ -89,6 +119,7 @@ data class NetworkDependencies(
     val gson: Gson,
     val okHttpClient: OkHttpClient,
     val retrofit: Retrofit,
-    val apiService: OpenAiApiService
+    val apiService: OpenAiApiService,
+    val yandexApiService: YandexApiService
 )
 

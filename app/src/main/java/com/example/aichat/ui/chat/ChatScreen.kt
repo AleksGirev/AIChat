@@ -22,6 +22,7 @@ import com.example.aichat.ui.viewmodel.ChatViewModel
 fun ChatScreen(
     viewModel: ChatViewModel,
     onSettingsClick: () -> Unit = {},
+    onComparisonClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
@@ -50,6 +51,10 @@ fun ChatScreen(
             TopAppBar(
                 title = { Text("AI Chat") },
                 actions = {
+                    // Comparison button
+                    TextButton(onClick = onComparisonClick) {
+                        Text("Compare")
+                    }
                     // New Chat button
                     TextButton(
                         onClick = { viewModel.startNewChat() },
