@@ -21,7 +21,8 @@ class ChatViewModel : ViewModel() {
     private val networkDeps = NetworkModule.createNetworkDependencies()
     private val repository = ChatRepository(
         apiService = networkDeps.apiService,
-        apiKey = Config.OPENAI_API_KEY
+        apiKey = Config.OPENAI_API_KEY,
+        yandexApiService = networkDeps.yandexApiService
     )
     
     private val _messages = MutableStateFlow<List<UiMessage>>(emptyList())
@@ -33,12 +34,37 @@ class ChatViewModel : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
     
+    // Available models
+    val availableModels = listOf(
+        "amazon/nova-2-lite-v1:free" to "Amazon Nova 2 Lite",
+        "gpt://${Config.YANDEX_FOLDER_ID}/yandexgpt/latest" to "YandexGPT"
+    )
+    
     // Settings
+    private val _modelName = MutableStateFlow("amazon/nova-2-lite-v1:free")
+    val modelName: StateFlow<String> = _modelName.asStateFlow()
+    
     private val _temperature = MutableStateFlow(0.7)
     val temperature: StateFlow<Double> = _temperature.asStateFlow()
     
     private val _systemPrompt = MutableStateFlow("")
     val systemPrompt: StateFlow<String> = _systemPrompt.asStateFlow()
+    
+    /**
+     * Gets display name for current model
+     */
+    fun getModelDisplayName(): String {
+        return availableModels.find { it.first == _modelName.value }?.second 
+            ?: _modelName.value.split("/").lastOrNull() 
+            ?: _modelName.value
+    }
+    
+    /**
+     * Sets the model to use for chat
+     */
+    fun setModel(model: String) {
+        _modelName.value = model
+    }
     
     /**
      * Updates the temperature setting
@@ -98,7 +124,7 @@ class ChatViewModel : ViewModel() {
         viewModelScope.launch {
             val result = repository.sendChatRequest(
                 messages = allMessages,
-                model = "amazon/nova-2-lite-v1:free",
+                model = _modelName.value,
                 temperature = _temperature.value
             )
             
@@ -107,12 +133,31 @@ class ChatViewModel : ViewModel() {
             result.onSuccess { response ->
                 val assistantMessage = response.choices.firstOrNull()?.message?.content
                 if (assistantMessage != null) {
+                    // Get token information from response
+                    val usage = response.usage
+                    val requestTokens = response.estimatedRequestTokens
+                    val responseTokens = usage?.completionTokens
+                    val totalTokens = usage?.totalTokens
+                    
                     val assistantUiMessage = UiMessage(
                         id = UUID.randomUUID().toString(),
                         content = assistantMessage,
-                        isUser = false
+                        isUser = false,
+                        requestTokens = requestTokens,
+                        responseTokens = responseTokens,
+                        totalTokens = totalTokens
                     )
-                    _messages.value = _messages.value + assistantUiMessage
+                    
+                    // Update the last user message with request tokens info
+                    val updatedMessages = _messages.value.toMutableList()
+                    if (updatedMessages.isNotEmpty() && updatedMessages.last().isUser) {
+                        val lastUserMessage = updatedMessages.last()
+                        updatedMessages[updatedMessages.size - 1] = lastUserMessage.copy(
+                            requestTokens = requestTokens
+                        )
+                    }
+                    updatedMessages.add(assistantUiMessage)
+                    _messages.value = updatedMessages
                 } else {
                     _errorMessage.value = "No response from model"
                 }

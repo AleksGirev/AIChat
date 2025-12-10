@@ -12,7 +12,9 @@ data class ChatResponse(
     val created: Long,
     val model: String,
     val choices: List<Choice>,
-    val usage: Usage?
+    val usage: Usage?,
+    // Estimated request tokens (calculated before sending)
+    val estimatedRequestTokens: Int? = null
 )
 
 data class Choice(

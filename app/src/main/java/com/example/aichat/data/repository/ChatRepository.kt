@@ -8,6 +8,7 @@ import com.example.aichat.data.model.ChatRequest
 import com.example.aichat.data.model.ChatResponse
 import com.example.aichat.data.model.ModelComparisonResult
 import com.example.aichat.data.util.ModelCostCalculator
+import com.example.aichat.data.util.TokenCounter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -41,6 +42,9 @@ class ChatRepository(
         temperature: Double? = null
     ): Result<ChatResponse> = withContext(Dispatchers.IO) {
         try {
+            // Estimate request tokens before sending
+            val estimatedRequestTokens = TokenCounter.estimateRequestTokens(messages)
+            
             val request = ChatRequest(
                 model = model,
                 messages = messages,
@@ -48,14 +52,34 @@ class ChatRepository(
                 temperature = temperature
             )
             
-            val authorization = "Bearer $apiKey"
-            val response = apiService.sendChatRequest(
-                authorization = authorization,
-                request = request
-            )
+            // Route to appropriate API based on model name
+            val response = if (model.lowercase().contains("yandex") || model.startsWith("gpt://")) {
+                // YandexGPT API
+                if (yandexApiService == null) {
+                    return@withContext Result.failure(Exception("YandexGPT API service not configured"))
+                }
+                val authorization = "Bearer ${Config.YANDEX_IAM_TOKEN}"
+                yandexApiService.sendChatRequest(
+                    authorization = authorization,
+                    folderId = Config.YANDEX_FOLDER_ID,
+                    request = request
+                )
+            } else {
+                // OpenRouter API (for amazon/nova-2-lite-v1:free and others)
+                val authorization = "Bearer $apiKey"
+                apiService.sendChatRequest(
+                    authorization = authorization,
+                    request = request
+                )
+            }
             
             if (response.isSuccessful && response.body() != null) {
-                Result.success(response.body()!!)
+                // Add estimated request tokens to response
+                val responseBody = response.body()!!
+                val responseWithTokens = responseBody.copy(
+                    estimatedRequestTokens = estimatedRequestTokens
+                )
+                Result.success(responseWithTokens)
             } else {
                 val errorBody = response.errorBody()?.string() ?: "Unknown error"
                 Result.failure(Exception("API Error: ${response.code()} - $errorBody"))

@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -23,13 +24,16 @@ fun ChatScreen(
     viewModel: ChatViewModel,
     onSettingsClick: () -> Unit = {},
     onComparisonClick: () -> Unit = {},
+    onTokenComparisonClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val modelName by viewModel.modelName.collectAsStateWithLifecycle()
     
     var inputText by remember { mutableStateOf(TextFieldValue("")) }
+    var showModelSelector by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     
     // Scroll to bottom when new message is added
@@ -49,8 +53,25 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("AI Chat") },
+                title = { 
+                    Column {
+                        Text("AI Chat")
+                        Text(
+                            text = viewModel.getModelDisplayName(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 actions = {
+                    // Model selector button
+                    TextButton(onClick = { showModelSelector = !showModelSelector }) {
+                        Text("Model")
+                    }
+                    // Token comparison button
+                    TextButton(onClick = onTokenComparisonClick) {
+                        Text("Tokens")
+                    }
                     // Comparison button
                     TextButton(onClick = onComparisonClick) {
                         Text("Compare")
@@ -75,6 +96,46 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Model selector dropdown
+            if (showModelSelector) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Text(
+                            text = "Выберите модель:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            viewModel.availableModels.forEach { (modelId, displayName) ->
+                                FilterChip(
+                                    selected = modelName == modelId,
+                                    onClick = { 
+                                        viewModel.setModel(modelId)
+                                        showModelSelector = false
+                                    },
+                                    label = { Text(displayName) },
+                                    modifier = Modifier.weight(1f),
+                                    enabled = !isLoading
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
             // Messages list
         LazyColumn(
             state = listState,

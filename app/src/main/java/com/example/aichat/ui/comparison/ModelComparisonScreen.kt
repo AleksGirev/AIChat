@@ -27,6 +27,7 @@ fun ModelComparisonScreen(
     viewModel: ModelComparisonViewModel,
     onModelSelectionClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
+    onTokenComparisonClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val selectedModels by viewModel.selectedModels.collectAsStateWithLifecycle()
@@ -69,6 +70,10 @@ fun ModelComparisonScreen(
                     }
                 },
                 actions = {
+                    // Token comparison button
+                    TextButton(onClick = onTokenComparisonClick) {
+                        Text("Tokens")
+                    }
                     // Clear results button
                     TextButton(
                         onClick = { viewModel.clearResults() },

@@ -34,18 +34,65 @@ fun MessageItem(
                 }
             )
         ) {
-            Text(
-                text = message.content,
-                modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (message.isUser) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                textAlign = if (message.isUser) TextAlign.End else TextAlign.Start
-            )
+            Column(
+                modifier = Modifier.padding(12.dp)
+            ) {
+                Text(
+                    text = message.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (message.isUser) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    textAlign = if (message.isUser) TextAlign.End else TextAlign.Start
+                )
+                
+                // Display token information if available
+                if (message.requestTokens != null || message.responseTokens != null || message.totalTokens != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        message.requestTokens?.let { tokens ->
+                            Text(
+                                text = "📤 $tokens",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (message.isUser) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                }
+                            )
+                        }
+                        message.responseTokens?.let { tokens ->
+                            Text(
+                                text = "📥 $tokens",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (message.isUser) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                }
+                            )
+                        }
+                        message.totalTokens?.let { tokens ->
+                            Text(
+                                text = "Σ $tokens",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = if (message.isUser) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
 

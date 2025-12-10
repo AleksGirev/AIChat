@@ -15,3 +15,4 @@ data class ChatRequest(
     val stream: Boolean = false
 )
 
+
