@@ -9,10 +9,13 @@ import com.example.aichat.data.local.ChatHistoryRepository
 import com.example.aichat.data.model.ChatMessage
 import com.example.aichat.data.network.NetworkModule
 import com.example.aichat.data.repository.ChatRepository
+import com.example.aichat.data.util.HistoryCompressionService
 import com.example.aichat.ui.model.UiMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -32,8 +35,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val database = ChatDatabase.getDatabase(application)
     private val historyRepository = ChatHistoryRepository(database.chatMessageDao())
     
-    private val _messages = MutableStateFlow<List<UiMessage>>(emptyList())
-    val messages: StateFlow<List<UiMessage>> = _messages.asStateFlow()
+    // Initialize compression service
+    private val compressionService = HistoryCompressionService(
+        chatRepository = repository
+    )
+    
+    // Internal flow with all messages including summaries (for compression logic)
+    private val _allMessages = MutableStateFlow<List<UiMessage>>(emptyList())
+    
+    // Expose only non-summary messages to UI (summary messages are hidden from user)
+    // Limit to 100 most recent messages for display
+    val messages: StateFlow<List<UiMessage>> = _allMessages.map { messages ->
+        messages.filter { !it.isSummary }
+            .takeLast(100) // Keep only the 100 most recent messages for display
+    }.stateIn(
+        scope = viewModelScope,
+        started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
     
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -70,11 +89,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val savedMessages = historyRepository.getLastMessages()
                 if (savedMessages.isNotEmpty()) {
-                    _messages.value = savedMessages
+                    _allMessages.value = savedMessages
                 }
             } catch (e: Exception) {
                 // If loading fails, start with empty list
-                _messages.value = emptyList()
+                _allMessages.value = emptyList()
             }
         }
     }
@@ -115,98 +134,184 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(messageText: String) {
         if (messageText.isBlank() || _isLoading.value) return
         
-        // Add user message to the list
+        // Add user message to the list immediately (for UX - user sees it right away)
         val userMessage = UiMessage(
             id = UUID.randomUUID().toString(),
             content = messageText.trim(),
             isUser = true
         )
-        _messages.value = _messages.value + userMessage
-        
-        // Save user message to database
-        viewModelScope.launch {
-            historyRepository.saveMessage(userMessage)
-        }
-        
-        // Convert UI messages to ChatMessage format for API
-        // Build conversation history from existing messages (excluding the one we just added)
-        val conversationHistory = _messages.value
-            .dropLast(1) // Exclude the user message we just added
-            .map { uiMessage ->
-                ChatMessage(
-                    role = if (uiMessage.isUser) "user" else "assistant",
-                    content = uiMessage.content
-                )
-            }
-            .takeLast(20) // Keep last 20 messages for context
-        
-        // Build messages list with system prompt if set
-        val allMessages = buildList {
-            // Add system prompt if configured
-            if (_systemPrompt.value.isNotBlank()) {
-                add(ChatMessage(role = "system", content = _systemPrompt.value))
-            }
-            // Add conversation history
-            addAll(conversationHistory)
-            // Add current user message
-            add(ChatMessage(role = "user", content = messageText.trim()))
-        }
+        _allMessages.value = _allMessages.value + userMessage
         
         _isLoading.value = true
         _errorMessage.value = null
         
         viewModelScope.launch {
-            val result = repository.sendChatRequest(
-                messages = allMessages,
-                model = _modelName.value,
-                temperature = _temperature.value
-            )
-            
-            _isLoading.value = false
-            
-            result.onSuccess { response ->
-                val assistantMessage = response.choices.firstOrNull()?.message?.content
-                if (assistantMessage != null) {
-                    // Get token information from response
-                    val usage = response.usage
-                    val requestTokens = response.estimatedRequestTokens
-                    val responseTokens = usage?.completionTokens
-                    val totalTokens = usage?.totalTokens
-                    
-                    val assistantUiMessage = UiMessage(
-                        id = UUID.randomUUID().toString(),
-                        content = assistantMessage,
-                        isUser = false,
-                        requestTokens = requestTokens,
-                        responseTokens = responseTokens,
-                        totalTokens = totalTokens
+            try {
+                // Get messages BEFORE adding the current user message (for compression check)
+                val messagesBeforeCurrent = _allMessages.value.dropLast(1)
+                
+                // Check if compression threshold is reached BEFORE sending
+                val shouldCompress = compressionService.shouldCompressBeforeSending(messagesBeforeCurrent)
+                
+                var summaryMessage: UiMessage? = null
+                var compressedIds: List<String> = emptyList()
+                
+                if (shouldCompress) {
+                    // Compress all previous messages (excluding current user message)
+                    val compressionResult = compressionService.compressAllPreviousMessages(
+                        messagesBeforeCurrent,
+                        _modelName.value
                     )
                     
-                    // Update the last user message with request tokens info
-                    val updatedMessages = _messages.value.toMutableList()
-                    if (updatedMessages.isNotEmpty() && updatedMessages.last().isUser) {
-                        val lastUserMessage = updatedMessages.last()
-                        val updatedUserMessage = lastUserMessage.copy(
-                            requestTokens = requestTokens
-                        )
-                        updatedMessages[updatedMessages.size - 1] = updatedUserMessage
-                        // Update user message in database
-                        viewModelScope.launch {
-                            historyRepository.saveMessage(updatedUserMessage)
+                    if (compressionResult != null) {
+                        val (summary, ids) = compressionResult
+                        summaryMessage = summary
+                        compressedIds = ids
+                        
+                        // Replace compressed messages in database with summary
+                        // This is for storage efficiency - summaries replace originals in DB
+                        // BUT we keep original messages in memory for UI display
+                        if (compressedIds.isNotEmpty()) {
+                            historyRepository.deleteMessagesByIds(compressedIds)
                         }
-                    }
-                    updatedMessages.add(assistantUiMessage)
-                    _messages.value = updatedMessages
-                    
-                    // Save assistant message to database
-                    viewModelScope.launch {
-                        historyRepository.saveMessage(assistantUiMessage)
+                        historyRepository.saveMessage(summary)
+                        
+                        // Update internal state: keep original messages for UI display,
+                        // but add summary for API/compression logic (summary is filtered from UI)
+                        // This ensures user sees all original messages while API uses compressed context
+                        val compressedIdsSet = compressedIds.toSet()
+                        
+                        // Build updated list: summary (for API/compression) + ALL original messages + current user message
+                        // Original messages stay visible in UI, summary is used for API requests
+                        val updatedMessages = mutableListOf<UiMessage>()
+                        updatedMessages.add(summary) // Add summary first (will be filtered from UI, used for API)
+                        updatedMessages.addAll(messagesBeforeCurrent) // Keep ALL original messages for UI display
+                        updatedMessages.add(userMessage) // Add current user message
+                        
+                        _allMessages.value = updatedMessages
                     }
                 } else {
-                    _errorMessage.value = "No response from model"
+                    // No compression needed - just save the user message
+                    historyRepository.saveMessage(userMessage)
                 }
-            }.onFailure { error ->
-                _errorMessage.value = error.message ?: "Unknown error occurred"
+                
+                // Build messages list for API request
+                // If compression occurred, send only summary + current user message
+                // Otherwise, use normal conversation history
+                val apiMessages = buildList {
+                    if (summaryMessage != null) {
+                        // Compression occurred - send only summary + current message
+                        // Summary goes into system message for context
+                        val systemContent = buildString {
+                            append("Контекст предыдущего разговора:\n")
+                            append(summaryMessage.content)
+                            if (_systemPrompt.value.isNotBlank()) {
+                                append("\n\n")
+                                append(_systemPrompt.value)
+                            }
+                        }
+                        add(ChatMessage(role = "system", content = systemContent))
+                        add(ChatMessage(role = "user", content = messageText.trim()))
+                    } else {
+                        // No compression - use normal flow
+                        val messagesForContext = messagesBeforeCurrent
+                        val (conversationHistory, summaryContext) = compressionService.buildConversationHistory(messagesForContext)
+                        val limitedHistory = conversationHistory.takeLast(20) // Keep last 20 messages for context
+                        
+                        // Build system message content
+                        val systemContent = buildString {
+                            if (summaryContext != null && summaryContext.isNotBlank()) {
+                                append("Контекст предыдущего разговора:\n")
+                                append(summaryContext)
+                                if (_systemPrompt.value.isNotBlank()) {
+                                    append("\n\n")
+                                    append(_systemPrompt.value)
+                                }
+                            } else if (_systemPrompt.value.isNotBlank()) {
+                                append(_systemPrompt.value)
+                            }
+                        }
+                        
+                        var hasSystemMessage = false
+                        
+                        if (summaryContext != null && summaryContext.isNotBlank()) {
+                            add(ChatMessage(role = "system", content = systemContent))
+                            hasSystemMessage = true
+                        } else if (systemContent.isNotBlank()) {
+                            add(ChatMessage(role = "system", content = systemContent))
+                            hasSystemMessage = true
+                        }
+                        
+                        if (limitedHistory.isNotEmpty()) {
+                            val firstMessage = limitedHistory.first()
+                            if (firstMessage.role == "assistant" && !hasSystemMessage) {
+                                if (summaryContext != null && summaryContext.isNotBlank()) {
+                                    add(0, ChatMessage(role = "system", content = systemContent))
+                                    hasSystemMessage = true
+                                } else {
+                                    add(ChatMessage(role = "system", content = "Продолжи разговор на основе предыдущего контекста."))
+                                    hasSystemMessage = true
+                                }
+                            }
+                            addAll(limitedHistory)
+                        }
+                        
+                        add(ChatMessage(role = "user", content = messageText.trim()))
+                    }
+                }
+                
+                // Send API request
+                val result = repository.sendChatRequest(
+                    messages = apiMessages,
+                    model = _modelName.value,
+                    temperature = _temperature.value
+                )
+                
+                _isLoading.value = false
+                
+                result.onSuccess { response ->
+                    val assistantMessage = response.choices.firstOrNull()?.message?.content
+                    if (assistantMessage != null) {
+                        // Get token information from response
+                        val usage = response.usage
+                        val requestTokens = response.estimatedRequestTokens
+                        val responseTokens = usage?.completionTokens
+                        val totalTokens = usage?.totalTokens
+                        
+                        val assistantUiMessage = UiMessage(
+                            id = UUID.randomUUID().toString(),
+                            content = assistantMessage,
+                            isUser = false,
+                            requestTokens = requestTokens,
+                            responseTokens = responseTokens,
+                            totalTokens = totalTokens
+                        )
+                        
+                        // Update the last user message with request tokens info
+                        val updatedMessages = _allMessages.value.toMutableList()
+                        if (updatedMessages.isNotEmpty() && updatedMessages.last().isUser) {
+                            val lastUserMessage = updatedMessages.last()
+                            val updatedUserMessage = lastUserMessage.copy(
+                                requestTokens = requestTokens
+                            )
+                            updatedMessages[updatedMessages.size - 1] = updatedUserMessage
+                            // Update user message in database
+                            historyRepository.saveMessage(updatedUserMessage)
+                        }
+                        updatedMessages.add(assistantUiMessage)
+                        _allMessages.value = updatedMessages
+                        
+                        // Save assistant message to database
+                        historyRepository.saveMessage(assistantUiMessage)
+                    } else {
+                        _errorMessage.value = "No response from model"
+                    }
+                }.onFailure { error ->
+                    _errorMessage.value = error.message ?: "Unknown error occurred"
+                }
+            } catch (e: Exception) {
+                _isLoading.value = false
+                _errorMessage.value = e.message ?: "Unknown error occurred"
             }
         }
     }
@@ -223,7 +328,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * This resets the conversation context for the LLM
      */
     fun startNewChat() {
-        _messages.value = emptyList()
+        _allMessages.value = emptyList()
         _errorMessage.value = null
         // Clear chat history from database
         viewModelScope.launch {

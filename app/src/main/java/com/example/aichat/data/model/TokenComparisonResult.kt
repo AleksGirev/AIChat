@@ -48,3 +48,4 @@ enum class RequestType(val displayName: String, val description: String) {
     EXCEEDS_LIMIT("Превышает лимит", "Запрос превышает контекстное окно модели")
 }
 
+

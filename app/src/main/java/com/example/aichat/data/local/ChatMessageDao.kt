@@ -60,4 +60,22 @@ interface ChatMessageDao {
      */
     @Query("SELECT COUNT(*) FROM chat_messages")
     suspend fun getMessageCount(): Int
+    
+    /**
+     * Get messages that are not summaries (original messages only)
+     */
+    @Query("SELECT * FROM chat_messages WHERE isSummary = 0 ORDER BY timestamp ASC LIMIT :limit")
+    suspend fun getNonSummaryMessages(limit: Int): List<ChatMessageEntity>
+    
+    /**
+     * Get messages by their IDs
+     */
+    @Query("SELECT * FROM chat_messages WHERE id IN (:ids) ORDER BY timestamp ASC")
+    suspend fun getMessagesByIds(ids: List<String>): List<ChatMessageEntity>
+    
+    /**
+     * Delete messages by their IDs
+     */
+    @Query("DELETE FROM chat_messages WHERE id IN (:ids)")
+    suspend fun deleteMessagesByIds(ids: List<String>)
 }

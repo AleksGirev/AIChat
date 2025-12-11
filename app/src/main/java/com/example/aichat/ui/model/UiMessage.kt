@@ -11,7 +11,9 @@ data class UiMessage(
     // Token information
     val requestTokens: Int? = null, // Estimated tokens for this request
     val responseTokens: Int? = null, // Actual tokens in response (from API)
-    val totalTokens: Int? = null // Total tokens (request + response)
+    val totalTokens: Int? = null, // Total tokens (request + response)
+    val isSummary: Boolean = false, // true if this message is a summary of previous messages
+    val compressedMessageIds: List<String> = emptyList() // IDs of messages that were compressed into this summary
 )
 
 

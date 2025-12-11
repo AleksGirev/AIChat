@@ -65,6 +65,27 @@ class ChatHistoryRepository(
     }
     
     /**
+     * Get messages that are not summaries (original messages)
+     */
+    suspend fun getNonSummaryMessages(limit: Int = MAX_MESSAGES): List<UiMessage> {
+        return chatMessageDao.getNonSummaryMessages(limit).map { it.toUiMessage() }
+    }
+    
+    /**
+     * Get messages by their IDs
+     */
+    suspend fun getMessagesByIds(ids: List<String>): List<UiMessage> {
+        return chatMessageDao.getMessagesByIds(ids).map { it.toUiMessage() }
+    }
+    
+    /**
+     * Delete messages by their IDs
+     */
+    suspend fun deleteMessagesByIds(ids: List<String>) {
+        chatMessageDao.deleteMessagesByIds(ids)
+    }
+    
+    /**
      * Convert ChatMessageEntity to UiMessage
      */
     private fun ChatMessageEntity.toUiMessage(): UiMessage {
@@ -75,7 +96,9 @@ class ChatHistoryRepository(
             timestamp = this.timestamp,
             requestTokens = this.requestTokens,
             responseTokens = this.responseTokens,
-            totalTokens = this.totalTokens
+            totalTokens = this.totalTokens,
+            isSummary = this.isSummary,
+            compressedMessageIds = this.compressedMessageIds
         )
     }
     
@@ -90,7 +113,9 @@ class ChatHistoryRepository(
             timestamp = this.timestamp,
             requestTokens = this.requestTokens,
             responseTokens = this.responseTokens,
-            totalTokens = this.totalTokens
+            totalTokens = this.totalTokens,
+            isSummary = this.isSummary,
+            compressedMessageIds = this.compressedMessageIds
         )
     }
 }
