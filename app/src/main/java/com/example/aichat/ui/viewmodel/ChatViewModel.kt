@@ -1,8 +1,11 @@
 package com.example.aichat.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aichat.data.Config
+import com.example.aichat.data.local.ChatDatabase
+import com.example.aichat.data.local.ChatHistoryRepository
 import com.example.aichat.data.model.ChatMessage
 import com.example.aichat.data.network.NetworkModule
 import com.example.aichat.data.repository.ChatRepository
@@ -16,7 +19,7 @@ import java.util.UUID
 /**
  * ViewModel for managing chat state and interactions
  */
-class ChatViewModel : ViewModel() {
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     private val networkDeps = NetworkModule.createNetworkDependencies()
     private val repository = ChatRepository(
@@ -24,6 +27,10 @@ class ChatViewModel : ViewModel() {
         apiKey = Config.OPENAI_API_KEY,
         yandexApiService = networkDeps.yandexApiService
     )
+    
+    // Initialize database and history repository
+    private val database = ChatDatabase.getDatabase(application)
+    private val historyRepository = ChatHistoryRepository(database.chatMessageDao())
     
     private val _messages = MutableStateFlow<List<UiMessage>>(emptyList())
     val messages: StateFlow<List<UiMessage>> = _messages.asStateFlow()
@@ -49,6 +56,28 @@ class ChatViewModel : ViewModel() {
     
     private val _systemPrompt = MutableStateFlow("")
     val systemPrompt: StateFlow<String> = _systemPrompt.asStateFlow()
+    
+    init {
+        // Load chat history on initialization
+        loadChatHistory()
+    }
+    
+    /**
+     * Loads chat history from the database
+     */
+    private fun loadChatHistory() {
+        viewModelScope.launch {
+            try {
+                val savedMessages = historyRepository.getLastMessages()
+                if (savedMessages.isNotEmpty()) {
+                    _messages.value = savedMessages
+                }
+            } catch (e: Exception) {
+                // If loading fails, start with empty list
+                _messages.value = emptyList()
+            }
+        }
+    }
     
     /**
      * Gets display name for current model
@@ -93,6 +122,11 @@ class ChatViewModel : ViewModel() {
             isUser = true
         )
         _messages.value = _messages.value + userMessage
+        
+        // Save user message to database
+        viewModelScope.launch {
+            historyRepository.saveMessage(userMessage)
+        }
         
         // Convert UI messages to ChatMessage format for API
         // Build conversation history from existing messages (excluding the one we just added)
@@ -152,12 +186,22 @@ class ChatViewModel : ViewModel() {
                     val updatedMessages = _messages.value.toMutableList()
                     if (updatedMessages.isNotEmpty() && updatedMessages.last().isUser) {
                         val lastUserMessage = updatedMessages.last()
-                        updatedMessages[updatedMessages.size - 1] = lastUserMessage.copy(
+                        val updatedUserMessage = lastUserMessage.copy(
                             requestTokens = requestTokens
                         )
+                        updatedMessages[updatedMessages.size - 1] = updatedUserMessage
+                        // Update user message in database
+                        viewModelScope.launch {
+                            historyRepository.saveMessage(updatedUserMessage)
+                        }
                     }
                     updatedMessages.add(assistantUiMessage)
                     _messages.value = updatedMessages
+                    
+                    // Save assistant message to database
+                    viewModelScope.launch {
+                        historyRepository.saveMessage(assistantUiMessage)
+                    }
                 } else {
                     _errorMessage.value = "No response from model"
                 }
@@ -181,6 +225,10 @@ class ChatViewModel : ViewModel() {
     fun startNewChat() {
         _messages.value = emptyList()
         _errorMessage.value = null
+        // Clear chat history from database
+        viewModelScope.launch {
+            historyRepository.clearHistory()
+        }
         // Note: Temperature and system prompt settings are preserved
     }
 }

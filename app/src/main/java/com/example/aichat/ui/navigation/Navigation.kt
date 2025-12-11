@@ -1,10 +1,12 @@
 package com.example.aichat.ui.navigation
 
+import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.aichat.ui.chat.ChatScreen
 import com.example.aichat.ui.comparison.ModelComparisonScreen
@@ -29,7 +31,10 @@ sealed class Screen {
  */
 @Composable
 fun AppNavigation(
-    viewModel: ChatViewModel = viewModel(),
+    viewModel: ChatViewModel = viewModel(
+        factory = androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory
+            .getInstance(LocalContext.current.applicationContext as Application)
+    ),
     comparisonViewModel: ModelComparisonViewModel = viewModel(),
     tokenComparisonViewModel: TokenComparisonViewModel = viewModel()
 ) {
