@@ -78,4 +78,35 @@ interface ChatMessageDao {
      */
     @Query("DELETE FROM chat_messages WHERE id IN (:ids)")
     suspend fun deleteMessagesByIds(ids: List<String>)
+    
+    /**
+     * Get messages by session ID
+     */
+    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY timestamp ASC")
+    suspend fun getMessagesBySessionId(sessionId: String): List<ChatMessageEntity>
+    
+    /**
+     * Get message count for a session
+     */
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
+    suspend fun getMessageCountBySessionId(sessionId: String): Int
+    
+    /**
+     * Delete all messages for a session
+     */
+    @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId")
+    suspend fun deleteMessagesBySessionId(sessionId: String)
+    
+    /**
+     * Get non-summary messages by session ID (messages that are not summaries themselves)
+     */
+    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId AND isSummary = 0 ORDER BY timestamp ASC")
+    suspend fun getNonSummaryMessagesBySessionId(sessionId: String): List<ChatMessageEntity>
+    
+    /**
+     * Get non-summary messages by session ID that were created after a specific timestamp
+     * Used to find messages that haven't been summarized yet
+     */
+    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId AND isSummary = 0 AND timestamp > :afterTimestamp ORDER BY timestamp ASC")
+    suspend fun getNonSummaryMessagesAfterTimestamp(sessionId: String, afterTimestamp: Long): List<ChatMessageEntity>
 }

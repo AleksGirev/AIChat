@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.aichat.ui.chat.ChatScreen
+import com.example.aichat.ui.chat.ChatListScreen
 import com.example.aichat.ui.comparison.ModelComparisonScreen
 import com.example.aichat.ui.comparison.TokenComparisonScreen
 import com.example.aichat.ui.settings.SettingsScreen
@@ -21,6 +22,7 @@ import com.example.aichat.ui.viewmodel.TokenComparisonViewModel
  */
 sealed class Screen {
     object Chat : Screen()
+    object ChatList : Screen()
     object Settings : Screen()
     object ModelComparison : Screen()
     object TokenComparison : Screen()
@@ -46,7 +48,18 @@ fun AppNavigation(
                 viewModel = viewModel,
                 onSettingsClick = { currentScreen = Screen.Settings },
                 onComparisonClick = { currentScreen = Screen.ModelComparison },
-                onTokenComparisonClick = { currentScreen = Screen.TokenComparison }
+                onTokenComparisonClick = { currentScreen = Screen.TokenComparison },
+                onChatListClick = { currentScreen = Screen.ChatList }
+            )
+        }
+        is Screen.ChatList -> {
+            ChatListScreen(
+                viewModel = viewModel,
+                onSessionClick = { sessionId ->
+                    viewModel.loadSession(sessionId)
+                    currentScreen = Screen.Chat
+                },
+                onBackClick = { currentScreen = Screen.Chat }
             )
         }
         is Screen.Settings -> {

@@ -8,6 +8,7 @@ data class UiMessage(
     val content: String,
     val isUser: Boolean, // true for user messages, false for assistant messages
     val timestamp: Long = System.currentTimeMillis(),
+    val sessionId: String, // ID of the chat session this message belongs to
     // Token information
     val requestTokens: Int? = null, // Estimated tokens for this request
     val responseTokens: Int? = null, // Actual tokens in response (from API)

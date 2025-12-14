@@ -7,17 +7,19 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 /**
- * Room database for storing chat messages
+ * Room database for storing chat messages, sessions, and external memory
  */
 @Database(
-    entities = [ChatMessageEntity::class],
-    version = 2,
+    entities = [ChatMessageEntity::class, ChatSessionEntity::class, ExternalMemoryEntity::class],
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(StringListConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
     
     abstract fun chatMessageDao(): ChatMessageDao
+    abstract fun chatSessionDao(): ChatSessionDao
+    abstract fun externalMemoryDao(): ExternalMemoryDao
     
     companion object {
         @Volatile

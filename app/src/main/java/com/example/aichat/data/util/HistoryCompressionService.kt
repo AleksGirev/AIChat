@@ -13,7 +13,7 @@ class HistoryCompressionService(
 ) {
     
     companion object {
-        const val COMPRESSION_THRESHOLD = 5 // Compress every 5 messages
+        const val COMPRESSION_THRESHOLD = 10 // Compress every 5 messages
     }
     
     /**
@@ -61,10 +61,13 @@ class HistoryCompressionService(
         val allCompressedIds = existingSummaries.flatMap { it.compressedMessageIds } + nonSummaryMessages.map { it.id }
         
         // Create summary message
+        // Get sessionId from first message (all messages in a session should have the same sessionId)
+        val sessionId = allContentToCompress.firstOrNull()?.sessionId ?: ""
         val summaryMessage = UiMessage(
             id = "summary_${System.currentTimeMillis()}",
             content = summary,
             isUser = false,
+            sessionId = sessionId,
             timestamp = allContentToCompress.first().timestamp, // Use timestamp of first compressed item
             isSummary = true,
             compressedMessageIds = allCompressedIds.distinct()
@@ -125,10 +128,13 @@ class HistoryCompressionService(
         val allCompressedIds = summariesToInclude.flatMap { it.compressedMessageIds } + compressedIds
         
         // Create summary message
+        // Get sessionId from first message (all messages in a session should have the same sessionId)
+        val sessionId = allContentToCompress.firstOrNull()?.sessionId ?: ""
         val summaryMessage = UiMessage(
             id = "summary_${System.currentTimeMillis()}",
             content = summary,
             isUser = false,
+            sessionId = sessionId,
             timestamp = allContentToCompress.first().timestamp, // Use timestamp of first compressed item
             isSummary = true,
             compressedMessageIds = allCompressedIds.distinct()

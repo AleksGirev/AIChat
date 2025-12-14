@@ -15,6 +15,7 @@ data class ChatMessageEntity(
     val content: String,
     val isUser: Boolean, // true for user messages, false for assistant messages
     val timestamp: Long,
+    val sessionId: String, // ID of the chat session this message belongs to
     val requestTokens: Int? = null,
     val responseTokens: Int? = null,
     val totalTokens: Int? = null,

@@ -32,6 +32,42 @@ class ChatHistoryRepository(
     }
     
     /**
+     * Get messages by session ID
+     */
+    suspend fun getMessagesBySessionId(sessionId: String): List<UiMessage> {
+        return chatMessageDao.getMessagesBySessionId(sessionId).map { it.toUiMessage() }
+    }
+    
+    /**
+     * Get message count for a session
+     */
+    suspend fun getMessageCountBySessionId(sessionId: String): Int {
+        return chatMessageDao.getMessageCountBySessionId(sessionId)
+    }
+    
+    /**
+     * Delete messages by session ID
+     */
+    suspend fun deleteMessagesBySessionId(sessionId: String) {
+        chatMessageDao.deleteMessagesBySessionId(sessionId)
+    }
+    
+    /**
+     * Get non-summary messages by session ID
+     */
+    suspend fun getNonSummaryMessagesBySessionId(sessionId: String): List<UiMessage> {
+        return chatMessageDao.getNonSummaryMessagesBySessionId(sessionId).map { it.toUiMessage() }
+    }
+    
+    /**
+     * Get non-summary messages by session ID that were created after a specific timestamp
+     * Used to find messages that haven't been summarized yet
+     */
+    suspend fun getNonSummaryMessagesAfterTimestamp(sessionId: String, afterTimestamp: Long): List<UiMessage> {
+        return chatMessageDao.getNonSummaryMessagesAfterTimestamp(sessionId, afterTimestamp).map { it.toUiMessage() }
+    }
+    
+    /**
      * Save a message to the database
      */
     suspend fun saveMessage(message: UiMessage) {
@@ -48,13 +84,11 @@ class ChatHistoryRepository(
      * Save multiple messages to the database
      */
     suspend fun saveMessages(messages: List<UiMessage>) {
+        if (messages.isEmpty()) return
         val entities = messages.map { it.toEntity() }
         chatMessageDao.insertMessages(entities)
-        // Ensure we don't exceed MAX_MESSAGES
-        val messageCount = chatMessageDao.getMessageCount()
-        if (messageCount > MAX_MESSAGES) {
-            chatMessageDao.deleteOldMessages(MAX_MESSAGES)
-        }
+        // Note: We don't limit messages when importing from JSON
+        // The limit is only applied when saving individual messages
     }
     
     /**
@@ -94,6 +128,7 @@ class ChatHistoryRepository(
             content = this.content,
             isUser = this.isUser,
             timestamp = this.timestamp,
+            sessionId = this.sessionId,
             requestTokens = this.requestTokens,
             responseTokens = this.responseTokens,
             totalTokens = this.totalTokens,
@@ -111,6 +146,7 @@ class ChatHistoryRepository(
             content = this.content,
             isUser = this.isUser,
             timestamp = this.timestamp,
+            sessionId = this.sessionId,
             requestTokens = this.requestTokens,
             responseTokens = this.responseTokens,
             totalTokens = this.totalTokens,

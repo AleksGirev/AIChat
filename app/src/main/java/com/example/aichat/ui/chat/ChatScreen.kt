@@ -25,6 +25,7 @@ fun ChatScreen(
     onSettingsClick: () -> Unit = {},
     onComparisonClick: () -> Unit = {},
     onTokenComparisonClick: () -> Unit = {},
+    onChatListClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
@@ -64,6 +65,10 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    // Chat list button
+                    TextButton(onClick = onChatListClick) {
+                        Text("Chats")
+                    }
                     // Model selector button
                     TextButton(onClick = { showModelSelector = !showModelSelector }) {
                         Text("Model")
@@ -79,9 +84,9 @@ fun ChatScreen(
                     // New Chat button
                     TextButton(
                         onClick = { viewModel.startNewChat() },
-                        enabled = !isLoading && messages.isNotEmpty()
+                        enabled = !isLoading
                     ) {
-                        Text("New Chat")
+                        Text("New")
                     }
                     // Settings button
                     IconButton(onClick = onSettingsClick) {
