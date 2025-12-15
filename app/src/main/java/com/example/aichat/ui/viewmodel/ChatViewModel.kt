@@ -1,6 +1,7 @@
 package com.example.aichat.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aichat.data.Config
@@ -9,6 +10,8 @@ import com.example.aichat.data.local.ChatHistoryRepository
 import com.example.aichat.data.local.ChatSessionRepository
 import com.example.aichat.data.local.ChatSessionEntity
 import com.example.aichat.data.local.ExternalMemoryRepository
+import com.example.aichat.data.mcp.McpConfig
+import com.example.aichat.data.mcp.McpFactory
 import com.example.aichat.data.util.JsonMemoryExporter
 import com.example.aichat.data.model.ChatMessage
 import com.example.aichat.data.network.NetworkModule
@@ -29,10 +32,20 @@ import java.util.UUID
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     private val networkDeps = NetworkModule.createNetworkDependencies()
+    
+    // Initialize MCP repository if enabled
+    private val mcpRepository = McpFactory.createMcpRepository(
+        context = application,
+        httpClient = networkDeps.okHttpClient,
+        gson = networkDeps.gson
+    )
+    
     private val repository = ChatRepository(
         apiService = networkDeps.apiService,
         apiKey = Config.OPENAI_API_KEY,
-        yandexApiService = networkDeps.yandexApiService
+        yandexApiService = networkDeps.yandexApiService,
+        mcpRepository = mcpRepository,
+        gson = networkDeps.gson
     )
     
     // Initialize database and repositories
@@ -96,9 +109,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     init {
         // Create a new session on initialization if none exists
+        Log.d("GIREV", "repository $mcpRepository")
         viewModelScope.launch {
             if (_currentSessionId.value == null) {
                 createNewSession()
+            }
+        }
+        
+        // Initialize MCP connection if available
+        viewModelScope.launch {
+            mcpRepository?.initialize()?.onFailure { error ->
+                Log.d("GIREV", "Failed to initialize MCP")
             }
         }
     }

@@ -21,7 +21,9 @@ data class Choice(
     val index: Int,
     val message: ChatMessage,
     @SerializedName("finish_reason")
-    val finishReason: String?
+    val finishReason: String?, // "stop", "length", "tool_calls", or "content_filter"
+    @SerializedName("delta")
+    val delta: ChatMessage? = null // For streaming responses
 )
 
 data class Usage(

@@ -50,12 +50,20 @@ object TokenCounter {
      */
     fun estimateMessageTokens(message: ChatMessage): Int {
         // Base content tokens
-        val contentTokens = estimateTokens(message.content)
+        val contentTokens = estimateTokens(message.content ?: "")
         
         // Role overhead: "user", "assistant", "system" + formatting ≈ 4 tokens
         val roleOverhead = 4
         
-        return contentTokens + roleOverhead
+        // If message has tool_calls, add overhead for tool call structure
+        val toolCallsOverhead = if (message.toolCalls != null && message.toolCalls.isNotEmpty()) {
+            // Estimate ~50 tokens per tool call (structure + arguments)
+            message.toolCalls.size * 50
+        } else {
+            0
+        }
+        
+        return contentTokens + roleOverhead + toolCallsOverhead
     }
     
     /**

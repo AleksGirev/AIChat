@@ -24,7 +24,8 @@ class TokenComparisonViewModel : ViewModel() {
     private val repository = ChatRepository(
         apiService = networkDeps.apiService,
         apiKey = Config.OPENAI_API_KEY,
-        yandexApiService = networkDeps.yandexApiService
+        yandexApiService = networkDeps.yandexApiService,
+        gson = networkDeps.gson
     )
     
     // Available models

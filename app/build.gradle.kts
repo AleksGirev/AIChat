@@ -70,6 +70,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     kapt(libs.androidx.room.compiler)
     
+    // Security (for EncryptedSharedPreferences)
+    implementation(libs.androidx.security.crypto)
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

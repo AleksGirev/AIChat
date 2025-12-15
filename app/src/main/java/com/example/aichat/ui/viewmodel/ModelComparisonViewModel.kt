@@ -24,7 +24,8 @@ class ModelComparisonViewModel : ViewModel() {
     private val repository = ChatRepository(
         apiService = networkDeps.apiService,
         apiKey = Config.OPENAI_API_KEY,
-        yandexApiService = networkDeps.yandexApiService
+        yandexApiService = networkDeps.yandexApiService,
+        gson = networkDeps.gson
     )
     
     // Fixed models for comparison: amazon/nova-2-lite-v1:free and YandexGPT
