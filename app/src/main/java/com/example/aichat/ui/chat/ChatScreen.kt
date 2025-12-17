@@ -12,8 +12,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.aichat.service.WeatherService
 import com.example.aichat.ui.model.UiMessage
 import com.example.aichat.ui.viewmodel.ChatViewModel
+import org.koin.compose.koinInject
 
 /**
  * Main chat screen composable
@@ -33,9 +35,15 @@ fun ChatScreen(
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val modelName by viewModel.modelName.collectAsStateWithLifecycle()
     
+    // Weather service for summary snackbars
+    val weatherService: WeatherService = koinInject()
+    val shouldShowSummary by weatherService.shouldShowSummary.collectAsStateWithLifecycle()
+    val summaryText by weatherService.summaryText.collectAsStateWithLifecycle()
+    
     var inputText by remember { mutableStateOf(TextFieldValue("")) }
     var showModelSelector by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
     
     // Scroll to bottom when new message is added
     LaunchedEffect(messages.size) {
@@ -51,7 +59,21 @@ fun ChatScreen(
         }
     }
     
+    // Show weather summary snackbar
+    LaunchedEffect(shouldShowSummary, summaryText) {
+        if (shouldShowSummary && summaryText != null) {
+            snackbarHostState.showSnackbar(
+                message = summaryText!!,
+                duration = SnackbarDuration.Long
+            )
+            weatherService.clearSummaryFlag()
+        }
+    }
+    
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        },
         topBar = {
             TopAppBar(
                 title = { 

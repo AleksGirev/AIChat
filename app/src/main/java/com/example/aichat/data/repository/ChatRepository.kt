@@ -42,7 +42,7 @@ class ChatRepository(
      * Handles MCP tool calling if MCP repository is available
      * 
      * @param messages List of chat messages (conversation history)
-     * @param model The model to use (default: gpt-3.5-turbo)
+     * @param model The model to use (default: YandexGPT)
      * @param maxTokens Maximum tokens in the response
      * @param temperature Temperature setting for the model (0.0 to 2.0)
      * @param enableTools Whether to enable MCP tools (default: true if MCP is available)
@@ -50,7 +50,7 @@ class ChatRepository(
      */
     suspend fun sendChatRequest(
         messages: List<ChatMessage>,
-        model: String = "amazon/nova-2-lite-v1:free",
+        model: String = Config.DEFAULT_YANDEXGPT_MODEL,
         maxTokens: Int? = 120000,
         temperature: Double? = null,
         enableTools: Boolean = true
@@ -142,7 +142,7 @@ class ChatRepository(
     suspend fun sendMessage(
         userMessage: String,
         conversationHistory: List<ChatMessage> = emptyList(),
-        model: String = "gpt-3.5-turbo",
+        model: String = Config.DEFAULT_YANDEXGPT_MODEL,
         maxTokens: Int? = null,
         temperature: Double? = null
     ): Result<String> {

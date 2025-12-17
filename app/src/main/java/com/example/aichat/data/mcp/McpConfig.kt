@@ -25,33 +25,41 @@ class McpConfig(context: Context) {
     )
     
     companion object {
-        private const val KEY_SERVER_TYPE = "server_type" // "http", "websocket", "stdio"
+        // Note: McpFactory supports "http", "rest", and "websocket" transport types
+        // stdio is stored here for compatibility but not used by McpFactory
+        private const val KEY_SERVER_TYPE = "server_type" // "http", "rest", "websocket"
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_API_KEY = "api_key"
-        private const val KEY_STDIO_COMMAND = "stdio_command"
+        private const val KEY_STDIO_COMMAND = "stdio_command" // Not used by McpFactory
         private const val KEY_ENABLED = "mcp_enabled"
         
-        // Default configuration (Context7 MCP)
-        const val DEFAULT_SERVER_TYPE = "http"
+        // Default configuration (REST API MCP server)
+        const val DEFAULT_SERVER_TYPE = "rest"
         val DEFAULT_SERVER_URL = Config.MCP_SERVER_URL
         val DEFAULT_API_KEY = Config.CONTEXT7_API_KEY.takeIf { it.isNotBlank() }
     }
     
     /**
      * MCP server configuration
+     * 
+     * Note: McpFactory.createTransport() supports "http", "rest", and "websocket" types.
+     * - "rest": REST API format (GET /tools, POST /tools/{name})
+     * - "http": JSON-RPC 2.0 format
+     * - "websocket": WebSocket connection
+     * stdioCommand is stored for backward compatibility but not used.
      */
     data class ServerConfig(
-        val type: String, // "http", "websocket", "stdio"
+        val type: String, // "http", "rest", or "websocket" (stdio not supported by McpFactory)
         val url: String? = null,
         val apiKey: String? = null,
-        val stdioCommand: List<String>? = null
+        val stdioCommand: List<String>? = null // Not used by McpFactory
     )
     
     /**
      * Gets current MCP server configuration
      */
     fun getServerConfig(): ServerConfig {
-        val type = sharedPreferences.getString(KEY_SERVER_TYPE, DEFAULT_SERVER_TYPE) ?: DEFAULT_SERVER_TYPE
+        val type = DEFAULT_SERVER_TYPE
         val url = sharedPreferences.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL)
         val apiKey = sharedPreferences.getString(KEY_API_KEY, DEFAULT_API_KEY)
         val stdioCommand = sharedPreferences.getStringSet(KEY_STDIO_COMMAND, null)

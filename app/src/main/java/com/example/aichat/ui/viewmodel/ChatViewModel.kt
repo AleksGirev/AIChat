@@ -12,6 +12,7 @@ import com.example.aichat.data.local.ChatSessionEntity
 import com.example.aichat.data.local.ExternalMemoryRepository
 import com.example.aichat.data.mcp.McpConfig
 import com.example.aichat.data.mcp.McpFactory
+import com.example.aichat.data.mcp.McpRepository
 import com.example.aichat.data.util.JsonMemoryExporter
 import com.example.aichat.data.model.ChatMessage
 import com.example.aichat.data.network.NetworkModule
@@ -27,20 +28,38 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
- * ViewModel for managing chat state and interactions
+ * ViewModel for managing chat state and interactions.
+ * 
+ * Now supports both manual instantiation (backward compatibility) and Koin injection.
+ * When using Koin, dependencies are injected; otherwise, they are created internally.
+ * 
+ * @param application Android Application context
+ * @param injectedRepository Optional injected ChatRepository (from Koin)
+ * @param injectedMcpRepository Optional injected McpRepository (from Koin)
+ * @param injectedHistoryRepository Optional injected ChatHistoryRepository (from Koin)
+ * @param injectedSessionRepository Optional injected ChatSessionRepository (from Koin)
+ * @param injectedExternalMemoryRepository Optional injected ExternalMemoryRepository (from Koin)
  */
-class ChatViewModel(application: Application) : AndroidViewModel(application) {
+class ChatViewModel(
+    application: Application,
+    private val injectedRepository: ChatRepository? = null,
+    private val injectedMcpRepository: McpRepository? = null,
+    private val injectedHistoryRepository: ChatHistoryRepository? = null,
+    private val injectedSessionRepository: ChatSessionRepository? = null,
+    private val injectedExternalMemoryRepository: ExternalMemoryRepository? = null
+) : AndroidViewModel(application) {
     
-    private val networkDeps = NetworkModule.createNetworkDependencies()
+    // Create dependencies if not injected (backward compatibility)
+    private val networkDeps by lazy { NetworkModule.createNetworkDependencies() }
     
-    // Initialize MCP repository if enabled
-    private val mcpRepository = McpFactory.createMcpRepository(
+    // Initialize MCP repository if enabled (use injected or create)
+    private val mcpRepository: McpRepository? = injectedMcpRepository ?: McpFactory.createMcpRepository(
         context = application,
         httpClient = networkDeps.okHttpClient,
         gson = networkDeps.gson
     )
     
-    private val repository = ChatRepository(
+    private val repository: ChatRepository = injectedRepository ?: ChatRepository(
         apiService = networkDeps.apiService,
         apiKey = Config.OPENAI_API_KEY,
         yandexApiService = networkDeps.yandexApiService,
@@ -48,11 +67,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         gson = networkDeps.gson
     )
     
-    // Initialize database and repositories
-    private val database = ChatDatabase.getDatabase(application)
-    private val historyRepository = ChatHistoryRepository(database.chatMessageDao())
-    private val sessionRepository = ChatSessionRepository(database.chatSessionDao())
-    private val externalMemoryRepository = ExternalMemoryRepository(database.externalMemoryDao())
+    // Initialize database and repositories (use injected or create)
+    private val database by lazy { ChatDatabase.getDatabase(application) }
+    private val historyRepository: ChatHistoryRepository = injectedHistoryRepository 
+        ?: ChatHistoryRepository(database.chatMessageDao())
+    private val sessionRepository: ChatSessionRepository = injectedSessionRepository 
+        ?: ChatSessionRepository(database.chatSessionDao())
+    private val externalMemoryRepository: ExternalMemoryRepository = injectedExternalMemoryRepository 
+        ?: ExternalMemoryRepository(database.externalMemoryDao())
     
     // Initialize compression service
     private val compressionService = HistoryCompressionService(
@@ -98,7 +120,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     )
     
     // Settings
-    private val _modelName = MutableStateFlow("amazon/nova-2-lite-v1:free")
+    private val _modelName = MutableStateFlow(Config.DEFAULT_YANDEXGPT_MODEL)
     val modelName: StateFlow<String> = _modelName.asStateFlow()
     
     private val _temperature = MutableStateFlow(0.7)

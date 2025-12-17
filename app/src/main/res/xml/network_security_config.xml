@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        Allow cleartext (HTTP) traffic for localhost and development servers.
+        This is necessary for connecting to local MCP servers during development.
+        
+        WARNING: Only use this for development. In production, use HTTPS.
+    -->
+    
+    <!-- Allow cleartext for localhost -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+    
+    <!-- Allow cleartext for Android emulator host (10.0.2.2 maps to host machine's localhost) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+    </domain-config>
+    
+    <!-- Allow cleartext for local network IPs (for physical device testing) -->
+    <!-- Note: You may need to add your specific IP address here -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">192.168.1.1</domain>
+        <domain includeSubdomains="true">192.168.0.1</domain>
+    </domain-config>
+    
+    <!-- 
+        For development: Allow cleartext for all IP addresses in debug builds.
+        In production, remove this and only allow specific domains above.
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+

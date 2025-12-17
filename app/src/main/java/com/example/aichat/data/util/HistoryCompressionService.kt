@@ -38,7 +38,7 @@ class HistoryCompressionService(
      */
     suspend fun compressAllPreviousMessages(
         allMessages: List<UiMessage>,
-        model: String = "amazon/nova-2-lite-v1:free"
+        model: String = com.example.aichat.data.Config.DEFAULT_YANDEXGPT_MODEL
     ): Pair<UiMessage, List<String>>? {
         if (allMessages.isEmpty()) return null
         
@@ -85,7 +85,7 @@ class HistoryCompressionService(
      */
     suspend fun compressIfNeeded(
         allMessages: List<UiMessage>,
-        model: String = "amazon/nova-2-lite-v1:free"
+        model: String = com.example.aichat.data.Config.DEFAULT_YANDEXGPT_MODEL
     ): Pair<List<UiMessage>, Boolean> {
         // Get messages that should be compressed:
         // - Oldest non-summary messages up to COMPRESSION_THRESHOLD

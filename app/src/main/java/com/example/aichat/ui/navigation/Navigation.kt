@@ -1,21 +1,22 @@
 package com.example.aichat.ui.navigation
 
-import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.aichat.ui.chat.ChatScreen
 import com.example.aichat.ui.chat.ChatListScreen
 import com.example.aichat.ui.comparison.ModelComparisonScreen
 import com.example.aichat.ui.comparison.TokenComparisonScreen
 import com.example.aichat.ui.settings.SettingsScreen
+import com.example.aichat.ui.summary.WeatherSummaryScreen
 import com.example.aichat.ui.viewmodel.ChatViewModel
 import com.example.aichat.ui.viewmodel.ModelComparisonViewModel
 import com.example.aichat.ui.viewmodel.TokenComparisonViewModel
+import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 /**
  * Navigation state for the app
@@ -26,21 +27,23 @@ sealed class Screen {
     object Settings : Screen()
     object ModelComparison : Screen()
     object TokenComparison : Screen()
+    object WeatherSummary : Screen()
 }
 
 /**
  * Main navigation composable
+ * 
+ * Uses Koin for ViewModel injection to support dependency injection
+ * of repositories and other components.
  */
 @Composable
 fun AppNavigation(
-    viewModel: ChatViewModel = viewModel(
-        factory = androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory
-            .getInstance(LocalContext.current.applicationContext as Application)
-    ),
+    viewModel: ChatViewModel = koinViewModel(),
     comparisonViewModel: ModelComparisonViewModel = viewModel(),
-    tokenComparisonViewModel: TokenComparisonViewModel = viewModel()
+    tokenComparisonViewModel: TokenComparisonViewModel = viewModel(),
+    initialScreen: Screen? = null
 ) {
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Chat) }
+    var currentScreen by remember { mutableStateOf<Screen>(initialScreen ?: Screen.Chat) }
     
     when (currentScreen) {
         is Screen.Chat -> {
@@ -78,6 +81,13 @@ fun AppNavigation(
         is Screen.TokenComparison -> {
             TokenComparisonScreen(
                 viewModel = tokenComparisonViewModel,
+                onBackClick = { currentScreen = Screen.Chat }
+            )
+        }
+        is Screen.WeatherSummary -> {
+            val weatherRepository: com.example.aichat.data.local.WeatherRepository = koinInject()
+            WeatherSummaryScreen(
+                weatherRepository = weatherRepository,
                 onBackClick = { currentScreen = Screen.Chat }
             )
         }

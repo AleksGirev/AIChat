@@ -6,7 +6,7 @@ import com.google.gson.annotations.SerializedName
  * Request model for OpenAI Chat API
  */
 data class ChatRequest(
-    val model: String = "gpt-3.5-turbo",
+    val model: String = com.example.aichat.data.Config.DEFAULT_YANDEXGPT_MODEL,
     val messages: List<ChatMessage>,
     @SerializedName("max_tokens")
     val maxTokens: Int? = null,

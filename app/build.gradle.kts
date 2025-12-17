@@ -73,6 +73,14 @@ dependencies {
     // Security (for EncryptedSharedPreferences)
     implementation(libs.androidx.security.crypto)
     
+    // WorkManager for background sync tasks
+    implementation(libs.androidx.work.runtime.ktx)
+    
+    // Koin DI
+    implementation(libs.koin.android)
+    implementation(libs.koin.android.workmanager)
+    implementation(libs.koin.androidx.compose)
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

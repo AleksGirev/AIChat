@@ -21,10 +21,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * MCP Transport implementation using stdio (stdin/stdout)
  * Used for local MCP servers launched as subprocesses
+ * 
+ * @param command The command and arguments to launch the MCP server
+ * @param gson Gson instance for JSON serialization
+ * @param environment Optional environment variables to set for the process
+ * @param workingDirectory Optional working directory for the process
  */
 class StdioMcpTransport(
     private val command: List<String>,
-    private val gson: Gson
+    private val gson: Gson,
+    private val environment: Map<String, String>? = null,
+    private val workingDirectory: String? = null
 ) : McpTransport {
     
     private var process: Process? = null
@@ -47,7 +54,23 @@ class StdioMcpTransport(
             Log.d(tag, "Starting MCP server: ${command.joinToString(" ")}")
             
             val processBuilder = ProcessBuilder(command)
-            processBuilder.redirectErrorStream(true)
+            
+            // Set environment variables if provided
+            environment?.let { env ->
+                val processEnv = processBuilder.environment()
+                env.forEach { (key, value) ->
+                    processEnv[key] = value
+                    Log.d(tag, "Setting env: $key=${if (key.contains("KEY", ignoreCase = true)) "***" else value}")
+                }
+            }
+            
+            // Set working directory if provided
+            workingDirectory?.let { dir ->
+                processBuilder.directory(java.io.File(dir))
+                Log.d(tag, "Working directory: $dir")
+            }
+            
+            processBuilder.redirectErrorStream(false) // Keep stderr separate for debugging
             process = processBuilder.start()
             
             stdinWriter = BufferedWriter(OutputStreamWriter(process!!.outputStream))

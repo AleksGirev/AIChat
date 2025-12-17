@@ -34,7 +34,7 @@ class TokenComparisonViewModel : ViewModel() {
         "gpt://${Config.YANDEX_FOLDER_ID}/yandexgpt/latest" to "YandexGPT"
     )
     
-    private val _modelName = MutableStateFlow("amazon/nova-2-lite-v1:free")
+    private val _modelName = MutableStateFlow(Config.DEFAULT_YANDEXGPT_MODEL)
     val modelName: StateFlow<String> = _modelName.asStateFlow()
     
     /**

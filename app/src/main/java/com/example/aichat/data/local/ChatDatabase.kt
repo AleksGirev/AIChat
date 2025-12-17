@@ -7,11 +7,22 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 /**
- * Room database for storing chat messages, sessions, and external memory
+ * Room database for storing chat messages, sessions, external memory, sync updates, and weather data.
+ * 
+ * Version History:
+ * - v4: Added ExternalMemoryEntity
+ * - v5: Added SyncUpdateEntity for background sync data
+ * - v6: Added WeatherEntity for Belarusian cities temperature data
  */
 @Database(
-    entities = [ChatMessageEntity::class, ChatSessionEntity::class, ExternalMemoryEntity::class],
-    version = 4,
+    entities = [
+        ChatMessageEntity::class,
+        ChatSessionEntity::class,
+        ExternalMemoryEntity::class,
+        SyncUpdateEntity::class,
+        WeatherEntity::class
+    ],
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(StringListConverter::class)
@@ -20,6 +31,8 @@ abstract class ChatDatabase : RoomDatabase() {
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun chatSessionDao(): ChatSessionDao
     abstract fun externalMemoryDao(): ExternalMemoryDao
+    abstract fun syncUpdateDao(): SyncUpdateDao
+    abstract fun weatherDao(): WeatherDao
     
     companion object {
         @Volatile
