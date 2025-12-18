@@ -128,31 +128,40 @@ class McpSearchClient(
      * Calls a search tool with the given query
      * 
      * @param toolName Name of the tool (e.g., "search_text", "search_images", "search_videos")
-     * @param query Search query string
-     * @param maxResults Maximum number of results (default: 10)
-     * @param region Search region (default: "us-en")
+     * @param query Search query string (required)
+     * @param region Search region (default: "ru-ru")
      * @param safesearch Safe search level: "on", "moderate", "off" (default: "moderate")
+     * @param timelimit Time limit filter: "w" for week, "m" for month, "y" for year, etc. (default: "w")
+     * @param maxResults Maximum number of results (default: 10)
+     * @param page Page number for pagination (default: 1)
+     * @param backend Search backend: "google", "duckduckgo", etc. (default: "google")
      * @return Result containing the tool result
      */
     suspend fun callSearchTool(
         toolName: String,
         query: String,
+        region: String = "ru-ru",
+        safesearch: String = "moderate",
+        timelimit: String = "w",
         maxResults: Int = 10,
-        region: String = "us-en",
-        safesearch: String = "moderate"
+        page: Int = 1,
+        backend: String = "google"
     ): Result<McpToolResult> = withContext(Dispatchers.IO) {
         try {
             val repo = mcpRepository ?: return@withContext Result.failure(
                 IllegalStateException("MCP client not initialized. Call initialize() first.")
             )
             
-            Log.d(tag, "Calling search tool: $toolName with query: $query, maxResults: $maxResults")
+            Log.d(tag, "Calling search tool: $toolName with query: $query, region: $region, maxResults: $maxResults, timelimit: $timelimit, backend: $backend")
             
             val arguments = mapOf<String, Any>(
                 "query" to query,
-                "max_results" to maxResults,
                 "region" to region,
-                "safesearch" to safesearch
+                "safesearch" to safesearch,
+                "timelimit" to timelimit,
+                "max_results" to maxResults,
+                "page" to page,
+                "backend" to backend
             )
             
             val result = repo.callTool(toolName, arguments)

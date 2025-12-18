@@ -238,12 +238,23 @@ class SearchAgentRepository(
                 }
                 
                 // Call MCP tool with proper arguments
-                val query = argsMap["query"] as? String ?: topic
+                val query = argsMap["query"] as? String ?: topic + "последние актуальные новости по теме за последние 7 дней"
                 val maxResults = (argsMap["max_results"] as? Number)?.toInt() ?: 10
+                val region = "ru-ru"
+                val safesearch = argsMap["safesearch"] as? String ?: "moderate"
+                val timelimit = "w"
+                val page = (argsMap["page"] as? Number)?.toInt() ?: 1
+                val backend = "google"
+                
                 val toolResult = mcpSearchClient.callSearchTool(
                     toolName = searchToolName,
                     query = query,
-                    maxResults = maxResults
+                    region = region,
+                    safesearch = safesearch,
+                    timelimit = timelimit,
+                    maxResults = maxResults,
+                    page = page,
+                    backend = backend
                 )
                 
                 val toolResultContent = if (toolResult.isSuccess) {
