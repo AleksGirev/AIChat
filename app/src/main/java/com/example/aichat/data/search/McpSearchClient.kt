@@ -143,7 +143,7 @@ class McpSearchClient(
         region: String = "ru-ru",
         safesearch: String = "moderate",
         timelimit: String = "w",
-        maxResults: Int = 10,
+        maxResults: Int = 3,
         page: Int = 1,
         backend: String = "google"
     ): Result<McpToolResult> = withContext(Dispatchers.IO) {

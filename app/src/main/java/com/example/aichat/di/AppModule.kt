@@ -12,6 +12,7 @@ import com.example.aichat.data.mcp.McpFactory
 import com.example.aichat.data.mcp.McpRepository
 import com.example.aichat.data.network.NetworkModule
 import com.example.aichat.data.repository.ChatRepository
+import com.example.aichat.data.brightdata.BrightDataMcpClient
 import com.example.aichat.data.search.McpSearchClient
 import com.example.aichat.data.search.SearchAgentRepository
 import com.example.aichat.service.WeatherService
@@ -130,6 +131,22 @@ val appModule = module {
         )
     }
     
+    /**
+     * BrightData MCP Client for reading articles by URLs
+     * Used for article reading functionality
+     * 
+     * Note: BrightData MCP uses stdio transport (npx -y @brightdata/mcp)
+     * For Android, uses REST bridge mode to connect to a local HTTP bridge server
+     * Bridge server should run on development machine and wrap the BrightData MCP stdio server
+     */
+    single {
+        BrightDataMcpClient(
+            gson = get(),
+            httpClient = get(),
+            useRestBridge = true // Use REST bridge for Android
+        )
+    }
+    
     // ==================== Repositories ====================
     
     /**
@@ -159,10 +176,12 @@ val appModule = module {
     /**
      * Search Agent Repository
      * Singleton: Orchestrates MCP search and LLM calls for article search
+     * Also fetches article content and generates summaries using BrightData and LLM
      */
     single {
         SearchAgentRepository(
             mcpSearchClient = get(),
+            brightDataMcpClient = get(),
             yandexApiService = get(),
             gson = get()
         )

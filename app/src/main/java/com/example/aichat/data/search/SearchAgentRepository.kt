@@ -3,13 +3,17 @@ package com.example.aichat.data.search
 import android.util.Log
 import com.example.aichat.data.Config
 import com.example.aichat.data.api.YandexApiService
+import com.example.aichat.data.brightdata.BrightDataMcpClient
 import com.example.aichat.data.mcp.model.McpTool
+import com.example.aichat.data.mcp.model.McpToolResult
 import com.example.aichat.data.model.ChatMessage
 import com.example.aichat.data.model.ChatRequest
 import com.example.aichat.data.model.ChatResponse
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import retrofit2.Response
 
@@ -23,14 +27,18 @@ import retrofit2.Response
  * 4. If LLM responds with tool_calls, execute them via MCP
  * 5. Return tool results to LLM for final response
  * 6. Parse LLM response to extract articles
+ * 7. For each article, fetch content using BrightData and generate summary
+ * 8. Return articles with summaries
  * 
  * Error Handling:
  * - Network failures wrapped in SearchResult.Error
  * - Empty results handled gracefully
  * - Invalid LLM output parsed with fallback
+ * - Article fetching failures don't block other articles
  */
 class SearchAgentRepository(
     private val mcpSearchClient: McpSearchClient,
+    private val brightDataMcpClient: BrightDataMcpClient,
     private val yandexApiService: YandexApiService,
     private val gson: Gson
 ) {
@@ -114,7 +122,11 @@ class SearchAgentRepository(
             }
             
             Log.d(tag, "Found ${articles.size} articles")
-            SearchResult.Success(articles)
+            
+            // Step 5: Fetch content and generate summaries for each article
+            val articlesWithSummaries = fetchArticleSummaries(articles)
+            
+            SearchResult.Success(articlesWithSummaries)
             
         } catch (e: Exception) {
             Log.e(tag, "Exception during article search", e)
@@ -239,7 +251,7 @@ class SearchAgentRepository(
                 
                 // Call MCP tool with proper arguments
                 val query = argsMap["query"] as? String ?: topic + "последние актуальные новости по теме за последние 7 дней"
-                val maxResults = (argsMap["max_results"] as? Number)?.toInt() ?: 10
+                val maxResults = 5
                 val region = "ru-ru"
                 val safesearch = argsMap["safesearch"] as? String ?: "moderate"
                 val timelimit = "w"
@@ -401,6 +413,155 @@ class SearchAgentRepository(
         }
         
         return articles
+    }
+    
+    /**
+     * Fetches article content and generates 3-sentence summaries for each article
+     * 
+     * @param articles List of articles with URLs
+     * @return List of articles with summaries
+     */
+    private suspend fun fetchArticleSummaries(articles: List<Article>): List<Article> = withContext(Dispatchers.IO) {
+        if (articles.isEmpty()) {
+            return@withContext emptyList()
+        }
+        
+        Log.d(tag, "Fetching content and generating summaries for ${articles.size} articles")
+        
+        // Initialize BrightData client if not already initialized
+        if (!brightDataMcpClient.isConnected()) {
+            val initResult = brightDataMcpClient.initialize()
+            if (initResult.isFailure) {
+                val error = initResult.exceptionOrNull() ?: Exception("Failed to initialize BrightData client")
+                Log.e(tag, "BrightData initialization failed, returning articles without summaries", error)
+                return@withContext articles // Return articles without summaries
+            }
+        }
+        
+        // Process articles in parallel (with limit to avoid overwhelming the system)
+        val articlesWithSummaries = articles.mapIndexed { index, article ->
+            async {
+                try {
+                    Log.d(tag, "Processing article ${index + 1}/${articles.size}: ${article.title}")
+                    
+                    // Step 1: Fetch article content using BrightData
+                    val contentResult = brightDataMcpClient.readArticle(article.url)
+                    if (contentResult.isFailure) {
+                        val error = contentResult.exceptionOrNull()
+                        Log.w(tag, "Failed to fetch content for ${article.url}: ${error?.message}")
+                        return@async article // Return article without summary
+                    }
+                    
+                    val toolResult = contentResult.getOrNull() ?: return@async article
+                    
+                    // Check if the tool result contains an error
+                    if (toolResult.isError) {
+                        val errorText = toolResult.content.firstOrNull()?.text ?: "Unknown error"
+                        Log.w(tag, "BrightData returned error for ${article.url}: $errorText")
+                        
+                        // If it's a bridge server error, provide helpful diagnostics
+                        if (errorText.contains("Expecting value", ignoreCase = true)) {
+                            Log.e(tag, """
+                                Bridge server communication error detected.
+                                This usually means:
+                                1. BrightData MCP stdio server is not running or crashed
+                                2. Invalid API token - verify BRIGHTDATA_API_KEY
+                                3. Bridge server cannot communicate with MCP server
+                                
+                                Check your bridge server logs for more details.
+                            """.trimIndent())
+                        }
+                        
+                        return@async article // Return article without summary
+                    }
+                    
+                    val articleContent = toolResult.content.firstOrNull()?.text ?: ""
+                    
+                    if (articleContent.isBlank()) {
+                        Log.w(tag, "Empty content for ${article.url}")
+                        return@async article
+                    }
+                    
+                    // Check if content is an error message
+                    if (articleContent.startsWith("Error:", ignoreCase = true)) {
+                        Log.w(tag, "Received error message instead of content for ${article.url}: $articleContent")
+                        return@async article
+                    }
+                    
+                    // Step 2: Generate 3-sentence summary using LLM
+                    val summary = generateSummary(articleContent, article.title)
+                    
+                    // Step 3: Return article with summary
+                    article.copy(summary = summary)
+                    
+                } catch (e: Exception) {
+                    Log.e(tag, "Error processing article ${article.url}", e)
+                    article // Return article without summary on error
+                }
+            }
+        }.awaitAll()
+        
+        Log.d(tag, "Completed processing ${articlesWithSummaries.size} articles")
+        articlesWithSummaries
+    }
+    
+    /**
+     * Generates a 3-sentence summary of article content using LLM
+     * 
+     * @param content Full article content
+     * @param title Article title for context
+     * @return 3-sentence summary in Russian
+     */
+    private suspend fun generateSummary(content: String, title: String): String? = withContext(Dispatchers.IO) {
+        try {
+            // Truncate content if too long (to avoid token limits)
+            val truncatedContent = if (content.length > 3000) {
+                content.take(3000) + "..."
+            } else {
+                content
+            }
+            
+            val prompt = """
+                Создай краткое резюме следующей статьи в ровно 3 предложениях на русском языке.
+                
+                Заголовок: $title
+                
+                Содержание статьи:
+                $truncatedContent
+                
+                Резюме должно быть:
+                - Точно 3 предложения
+                - На русском языке
+                - Кратким и информативным
+                - Отражать основные моменты статьи
+                
+                Верни только резюме, без дополнительных объяснений.
+            """.trimIndent()
+            
+            val chatRequest = ChatRequest(
+                model = Config.DEFAULT_YANDEXGPT_MODEL,
+                messages = listOf(
+                    ChatMessage(role = "user", content = prompt)
+                ),
+                tools = null,
+                toolChoice = null
+            )
+            
+            val response = callYandexApi(chatRequest)
+            if (response != null) {
+                val summary = response.choices.firstOrNull()?.message?.content?.trim()
+                if (!summary.isNullOrBlank()) {
+                    Log.d(tag, "Generated summary for: $title")
+                    return@withContext summary
+                }
+            }
+            
+            Log.w(tag, "Failed to generate summary for: $title")
+            null
+        } catch (e: Exception) {
+            Log.e(tag, "Exception generating summary", e)
+            null
+        }
     }
 }
 

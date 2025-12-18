@@ -347,50 +347,102 @@ class RestMcpTransport(
     /**
      * Parses tool result from REST API response
      * Supports multiple response formats:
-     * 1. HTTP Bridge format: {"success": true, "data": {"results": [...], "query": "...", "count": 5}}
+     * 1. HTTP Bridge format: {"success": true, "data": {...}} or {"success": false, "error": "..."}
      * 2. MCP format: {"content": [{"type": "text", "text": "..."}]}
      * 3. Simple format: {"text": "..."} or {"result": "..."}
      */
     private fun parseToolResultFromRestResponse(json: String): McpToolResult {
+        // Log raw response for debugging
+        Log.d(tag, "Parsing tool result response (length: ${json.length}): ${json.take(500)}")
+        
+        if (json.isBlank()) {
+            Log.e(tag, "Empty response body")
+            return McpToolResult(
+                content = listOf(ToolResultContent(type = "text", text = "Error: Empty response from server")),
+                isError = true
+            )
+        }
+        
         return try {
             val jsonObj = gson.fromJson(json, Map::class.java) as? Map<*, *>
             
             // Handle different response formats
             val content = when {
-                // HTTP Bridge format: {"success": true, "data": {"results": [...], ...}}
+                // HTTP Bridge format: {"success": true, "data": {...}} or {"success": false, "error": "..."}
                 jsonObj?.containsKey("success") == true -> {
                     val success = jsonObj["success"] as? Boolean ?: false
                     if (!success) {
                         val errorMsg = jsonObj["error"] as? String ?: "Unknown error"
+                        Log.e(tag, "Tool call failed with error: $errorMsg")
+                        
+                        // Provide helpful diagnostics for common errors
+                        val diagnosticMsg = when {
+                            errorMsg.contains("Expecting value", ignoreCase = true) -> {
+                                """
+                                Bridge server received invalid response from BrightData MCP server.
+                                
+                                Possible causes:
+                                1. BrightData MCP server is not running or crashed
+                                2. Invalid API token - check BRIGHTDATA_API_KEY in Config.kt
+                                3. Network/communication issue between bridge and MCP server
+                                4. MCP server returned empty or malformed response
+                                
+                                Check bridge server logs for more details.
+                                Original error: $errorMsg
+                                """.trimIndent()
+                            }
+                            errorMsg.contains("Unknown tool", ignoreCase = true) -> {
+                                "Tool not found. Make sure the tool name is correct. Error: $errorMsg"
+                            }
+                            else -> "Error: $errorMsg"
+                        }
+                        
                         return McpToolResult(
-                            content = listOf(ToolResultContent(type = "text", text = "Error: $errorMsg")),
+                            content = listOf(ToolResultContent(type = "text", text = diagnosticMsg)),
                             isError = true
                         )
                     }
                     
                     val data = jsonObj["data"] as? Map<*, *>
                     if (data != null) {
-                        // Convert results array to JSON string for MCP format
+                        // Handle different data formats
+                        // Format 1: {"data": {"results": [...], "query": "...", "count": 5}} (search results)
                         val resultsArray = data["results"] as? List<*>
-                        val query = data["query"] as? String ?: ""
-                        val count = data["count"] as? Number ?: 0
-                        
                         if (resultsArray != null) {
-                            // Convert results to JSON string
                             val resultsJson = gson.toJson(resultsArray)
                             listOf(ToolResultContent(
                                 type = "text",
                                 text = resultsJson
                             ))
                         } else {
-                            // Fallback: convert entire data object to JSON
-                            val dataJson = gson.toJson(data)
-                            listOf(ToolResultContent(
-                                type = "text",
-                                text = dataJson
-                            ))
+                            // Format 2: {"data": "markdown content"} or {"data": {"content": "..."}} (scrape_as_markdown)
+                            val dataText = data["content"] as? String 
+                                ?: data["text"] as? String
+                                ?: data["markdown"] as? String
+                            
+                            if (dataText != null) {
+                                listOf(ToolResultContent(
+                                    type = "text",
+                                    text = dataText
+                                ))
+                            } else if (data is String) {
+                                // Data is directly a string
+                                listOf(ToolResultContent(
+                                    type = "text",
+                                    text = data as String
+                                ))
+                            } else {
+                                // Fallback: convert entire data object to JSON
+                                val dataJson = gson.toJson(data)
+                                listOf(ToolResultContent(
+                                    type = "text",
+                                    text = dataJson
+                                ))
+                            }
                         }
                     } else {
+                        // Data is null but success is true - might be empty result
+                        Log.w(tag, "Success response but data is null")
                         emptyList()
                     }
                 }
@@ -426,9 +478,29 @@ class RestMcpTransport(
                 ?: false
             
             McpToolResult(content, isError)
+        } catch (e: com.google.gson.JsonSyntaxException) {
+            Log.e(tag, "JSON syntax error parsing tool result. Response: ${json.take(500)}", e)
+            // Try to extract error message from response if it's partially valid
+            val errorMsg = try {
+                if (json.contains("\"error\"")) {
+                    val errorMatch = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(json)
+                    errorMatch?.groupValues?.get(1) ?: "Invalid JSON response"
+                } else {
+                    "Invalid JSON response: ${e.message}"
+                }
+            } catch (ex: Exception) {
+                "Invalid JSON response: ${e.message}"
+            }
+            McpToolResult(
+                content = listOf(ToolResultContent(type = "text", text = "Error: $errorMsg")),
+                isError = true
+            )
         } catch (e: Exception) {
-            Log.e(tag, "Failed to parse tool result from REST response", e)
-            McpToolResult(emptyList(), isError = true)
+            Log.e(tag, "Failed to parse tool result from REST response. Response: ${json.take(500)}", e)
+            McpToolResult(
+                content = listOf(ToolResultContent(type = "text", text = "Error: ${e.message ?: "Failed to parse response"}")),
+                isError = true
+            )
         }
     }
     
