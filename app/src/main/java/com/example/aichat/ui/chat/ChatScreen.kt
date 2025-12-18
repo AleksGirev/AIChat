@@ -28,6 +28,7 @@ fun ChatScreen(
     onComparisonClick: () -> Unit = {},
     onTokenComparisonClick: () -> Unit = {},
     onChatListClick: () -> Unit = {},
+    onSearchAgentClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
@@ -109,6 +110,10 @@ fun ChatScreen(
                         enabled = !isLoading
                     ) {
                         Text("New")
+                    }
+                    // Search Agent button
+                    TextButton(onClick = onSearchAgentClick) {
+                        Text("Search")
                     }
                     // Settings button
                     IconButton(onClick = onSettingsClick) {

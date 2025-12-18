@@ -346,6 +346,10 @@ class RestMcpTransport(
     
     /**
      * Parses tool result from REST API response
+     * Supports multiple response formats:
+     * 1. HTTP Bridge format: {"success": true, "data": {"results": [...], "query": "...", "count": 5}}
+     * 2. MCP format: {"content": [{"type": "text", "text": "..."}]}
+     * 3. Simple format: {"text": "..."} or {"result": "..."}
      */
     private fun parseToolResultFromRestResponse(json: String): McpToolResult {
         return try {
@@ -353,7 +357,44 @@ class RestMcpTransport(
             
             // Handle different response formats
             val content = when {
-                // Direct content field
+                // HTTP Bridge format: {"success": true, "data": {"results": [...], ...}}
+                jsonObj?.containsKey("success") == true -> {
+                    val success = jsonObj["success"] as? Boolean ?: false
+                    if (!success) {
+                        val errorMsg = jsonObj["error"] as? String ?: "Unknown error"
+                        return McpToolResult(
+                            content = listOf(ToolResultContent(type = "text", text = "Error: $errorMsg")),
+                            isError = true
+                        )
+                    }
+                    
+                    val data = jsonObj["data"] as? Map<*, *>
+                    if (data != null) {
+                        // Convert results array to JSON string for MCP format
+                        val resultsArray = data["results"] as? List<*>
+                        val query = data["query"] as? String ?: ""
+                        val count = data["count"] as? Number ?: 0
+                        
+                        if (resultsArray != null) {
+                            // Convert results to JSON string
+                            val resultsJson = gson.toJson(resultsArray)
+                            listOf(ToolResultContent(
+                                type = "text",
+                                text = resultsJson
+                            ))
+                        } else {
+                            // Fallback: convert entire data object to JSON
+                            val dataJson = gson.toJson(data)
+                            listOf(ToolResultContent(
+                                type = "text",
+                                text = dataJson
+                            ))
+                        }
+                    } else {
+                        emptyList()
+                    }
+                }
+                // Direct content field (MCP format)
                 jsonObj?.containsKey("content") == true -> {
                     val contentList = jsonObj["content"] as? List<Map<*, *>>
                     contentList?.mapNotNull { parseContentItem(it) } ?: emptyList()
@@ -380,7 +421,9 @@ class RestMcpTransport(
                 }
             }
             
-            val isError = jsonObj?.get("isError") as? Boolean ?: false
+            val isError = jsonObj?.get("isError") as? Boolean 
+                ?: (jsonObj?.get("success") as? Boolean == false)
+                ?: false
             
             McpToolResult(content, isError)
         } catch (e: Exception) {

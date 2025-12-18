@@ -53,6 +53,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    // Material Icons Extended (includes ContentCopy, OpenInBrowser, etc.)
+    implementation("androidx.compose.material:material-icons-extended")
     
     // Networking
     implementation(libs.retrofit)
@@ -72,9 +74,6 @@ dependencies {
     
     // Security (for EncryptedSharedPreferences)
     implementation(libs.androidx.security.crypto)
-    
-    // WorkManager for background sync tasks
-    implementation(libs.androidx.work.runtime.ktx)
     
     // Koin DI
     implementation(libs.koin.android)

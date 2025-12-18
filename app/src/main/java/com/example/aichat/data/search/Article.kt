@@ -1,0 +1,12 @@
+package com.example.aichat.data.search
+
+/**
+ * Data model for an article found via search
+ */
+data class Article(
+    val title: String,
+    val url: String,
+    val publicationDate: String? = null,
+    val snippet: String? = null
+)
+
