@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "AI Chat"
 include(":app")
+include(":console-agent")
  
