@@ -1,0 +1,104 @@
+plugins {
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
+    application
+}
+
+group = "com.example.aichat"
+version = "1.0.0"
+
+dependencies {
+    // Kotlin stdlib
+    implementation(kotlin("stdlib"))
+    
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    
+    // Serialization (updated for Kotlin 2.2.0 compatibility)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    
+    // HTTP client
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    
+    // Official Kotlin MCP SDK
+    implementation("io.modelcontextprotocol:kotlin-sdk-client-jvm:0.8.0")
+    
+    // Kotlinx IO for stream handling (required by MCP SDK, updated for Kotlin 2.2.0)
+    implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.8.0")
+    
+    // Logging
+    implementation("org.slf4j:slf4j-simple:2.0.9")
+    
+    // Apache Tika for PDF and document parsing
+    implementation("org.apache.tika:tika-core:2.9.0")
+    implementation("org.apache.tika:tika-parsers:2.9.0")
+    
+    // SQLite JDBC driver (using stable version to avoid StackOverflowError)
+    implementation("org.xerial:sqlite-jdbc:3.43.2.2")
+}
+
+application {
+    mainClass.set("com.example.aichat.console.MainKt")
+}
+
+tasks.named<JavaExec>("run") {
+    standardInput = System.`in`
+}
+
+// Task для запуска RAG примера
+tasks.register<JavaExec>("runRag") {
+    group = "application"
+    description = "Run RAG pipeline example"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.aichat.console.rag.RAGExample")
+    
+    // Parse arguments properly, handling quotes
+    args = project.findProperty("rag.args")?.toString()?.let { argString ->
+        parseCommandLineArgs(argString)
+    } ?: emptyList()
+}
+
+// Helper function to parse command line arguments with quotes
+fun parseCommandLineArgs(argString: String): List<String> {
+    val args = mutableListOf<String>()
+    val currentArg = StringBuilder()
+    var inQuotes = false
+    var quoteChar: Char? = null
+    
+    var i = 0
+    while (i < argString.length) {
+        val char = argString[i]
+        when {
+            (char == '"' || char == '\'') -> {
+                if (inQuotes && char == quoteChar) {
+                    // Closing quote
+                    inQuotes = false
+                    quoteChar = null
+                } else if (!inQuotes) {
+                    // Opening quote
+                    inQuotes = true
+                    quoteChar = char
+                } else {
+                    // Different quote type inside string - add as-is
+                    currentArg.append(char)
+                }
+            }
+            char == ' ' && !inQuotes -> {
+                if (currentArg.isNotEmpty()) {
+                    args.add(currentArg.toString())
+                    currentArg.clear()
+                }
+            }
+            else -> {
+                currentArg.append(char)
+            }
+        }
+        i++
+    }
+    
+    if (currentArg.isNotEmpty()) {
+        args.add(currentArg.toString())
+    }
+    
+    return args
+}

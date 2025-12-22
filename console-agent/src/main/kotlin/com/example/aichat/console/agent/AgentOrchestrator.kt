@@ -223,6 +223,21 @@ class AgentOrchestrator(
     }
     
     /**
+     * Gets the current conversation history (for RAG integration)
+     */
+    fun getConversationHistory(): List<ChatMessage> {
+        return conversationHistory.toList()
+    }
+    
+    /**
+     * Sets the conversation history (for RAG integration)
+     */
+    fun setConversationHistory(history: List<ChatMessage>) {
+        conversationHistory.clear()
+        conversationHistory.addAll(history)
+    }
+    
+    /**
      * Shuts down the orchestrator
      */
     suspend fun shutdown() = withContext(Dispatchers.IO) {

@@ -1,14 +1,23 @@
 package com.example.aichat.console
 
 import com.example.aichat.console.agent.AgentOrchestrator
+import com.example.aichat.console.agent.RAGAgentOrchestrator
 import com.example.aichat.console.llm.OpenAiClient
 import com.example.aichat.console.mcp.McpClientFactory
 import com.example.aichat.console.mcp.McpClientWrapper
+import com.example.aichat.console.rag.RAGPipeline
 import kotlinx.coroutines.runBlocking
 
-fun main() {
+fun main(args: Array<String>) {
     runBlocking {
-        println("=== Mobile Device Control Agent ===")
+        // Check if RAG mode is enabled (default: true)
+        val useRAG = !args.contains("--no-rag")
+        
+        if (true) {
+            println("=== RAG-Enhanced AI Agent ===")
+        } else {
+            println("=== Mobile Device Control Agent ===")
+        }
         println()
         
         // Get YandexGPT credentials from environment
@@ -45,8 +54,29 @@ fun main() {
         // Initialize
         var mcpProcess: Process? = null
         var orchestrator: AgentOrchestrator? = null
+        var ragOrchestrator: RAGAgentOrchestrator? = null
+        var ragPipeline: RAGPipeline? = null
+        
         try {
             println("[Agent]: Инициализация...")
+            
+            // Initialize RAG pipeline if RAG mode is enabled
+            if (useRAG) {
+                val dbPath = ConsoleConfig.getRAGDatabasePath()
+                val ollamaBaseUrl = System.getenv("OLLAMA_BASE_URL") ?: "http://localhost:11434"
+                val ollamaModel = System.getenv("OLLAMA_MODEL") ?: "nomic-embed-text"
+                
+                println("[RAG]: Initializing RAG pipeline...")
+                println("[RAG]:   Database: $dbPath")
+                println("[RAG]:   Ollama URL: $ollamaBaseUrl")
+                println("[RAG]:   Embedding Model: $ollamaModel")
+                
+                ragPipeline = RAGPipeline.create(
+                    dbPath = dbPath,
+                    ollamaBaseUrl = ollamaBaseUrl,
+                    ollamaModel = ollamaModel
+                )
+            }
             
             // Create MCP client using official SDK
             println("[Agent]: Connecting to mobile-mcp server...")
@@ -70,25 +100,36 @@ fun main() {
                 null
             }
             
-            // Pass mcpClient to orchestrator - it will use it for tool listing and execution
-            orchestrator = AgentOrchestrator(llmClient, mcpClient)
-            
-            // Initialize orchestrator (fetches tools)
-            val orchestratorInit = orchestrator?.initialize() ?: Result.failure(Exception("Orchestrator not created"))
-            if (orchestratorInit.isFailure) {
-                val error = orchestratorInit.exceptionOrNull()
-                println("ERROR: Failed to initialize orchestrator: ${error?.message}")
-                println()
-                println("Troubleshooting:")
-                println("1. Check if a device is connected:")
-                println("   - Android: Run 'adb devices'")
-                println("   - iOS: Check Xcode device manager")
-                println("2. Verify Node.js is installed: 'node --version'")
-                println("3. Test MCP server manually: 'npx -y @mobilenext/mobile-mcp@latest'")
-                return@runBlocking
+            // Create appropriate orchestrator
+            if (useRAG && ragPipeline != null) {
+                ragOrchestrator = RAGAgentOrchestrator(llmClient, ragPipeline, mcpClient)
+                val initResult = ragOrchestrator.initialize()
+                if (initResult.isFailure) {
+                    val error = initResult.exceptionOrNull()
+                    println("ERROR: Failed to initialize RAG orchestrator: ${error?.message}")
+                    return@runBlocking
+                }
+            } else {
+                orchestrator = AgentOrchestrator(llmClient, mcpClient)
+                val orchestratorInit = orchestrator.initialize()
+                if (orchestratorInit.isFailure) {
+                    val error = orchestratorInit.exceptionOrNull()
+                    println("ERROR: Failed to initialize orchestrator: ${error?.message}")
+                    println()
+                    println("Troubleshooting:")
+                    println("1. Check if a device is connected:")
+                    println("   - Android: Run 'adb devices'")
+                    println("   - iOS: Check Xcode device manager")
+                    println("2. Verify Node.js is installed: 'node --version'")
+                    println("3. Test MCP server manually: 'npx -y @mobilenext/mobile-mcp@latest'")
+                    return@runBlocking
+                }
             }
             
             println("[Agent]: Готов к работе!")
+            if (useRAG) {
+                println("[RAG]: RAG mode enabled - questions will be answered using indexed documents")
+            }
             println()
             
             // Interactive loop
@@ -106,7 +147,11 @@ fun main() {
                         }
                         else -> {
                             // Process command
-                            val result = orchestrator?.processCommand(input) ?: Result.failure(Exception("Orchestrator not available"))
+                            val result = if (useRAG && ragOrchestrator != null) {
+                                ragOrchestrator.processCommand(input)
+                            } else {
+                                orchestrator?.processCommand(input) ?: Result.failure(Exception("Orchestrator not available"))
+                            }
                             
                             if (result.isSuccess) {
                                 val response = result.getOrThrow()
@@ -127,7 +172,9 @@ fun main() {
         } finally {
             // Cleanup
             try {
+                ragOrchestrator?.shutdown()
                 orchestrator?.shutdown()
+                ragPipeline?.close()
                 mcpProcess?.destroyForcibly() // Clean up MCP server process
             } catch (e: Exception) {
                 println("[Agent]: Error during shutdown: ${e.message}")
