@@ -28,19 +28,25 @@ class RAGAgentOrchestrator(
     private var conversationHistory = mutableListOf<ChatMessage>()
     
     /**
+     * Whether RAG is currently enabled
+     * When disabled, the orchestrator works like a regular AgentOrchestrator without RAG context
+     */
+    var ragEnabled: Boolean = true
+    
+    /**
      * Number of RAG results to include in context
      */
-    var ragContextLimit: Int = 5
+    var ragContextLimit: Int = 10
     
     /**
      * Minimum similarity threshold for RAG results (0.0 to 1.0)
      */
-    var minSimilarity: Float = 0.2f
+    var minSimilarity: Float = 0.5f
     
     /**
      * Maximum total characters from RAG context to include
      */
-    var maxContextChars: Int = 2000
+    var maxContextChars: Int = 4000
     
     /**
      * Initializes the orchestrator
@@ -71,10 +77,15 @@ class RAGAgentOrchestrator(
     }
     
     /**
-     * Processes a user command with RAG-enhanced context
+     * Processes a user command with RAG-enhanced context (if RAG is enabled)
      */
     suspend fun processCommand(userCommand: String): Result<String> = withContext(Dispatchers.IO) {
         try {
+            // If RAG is disabled, use base orchestrator directly
+            if (!ragEnabled) {
+                return@withContext baseOrchestrator.processCommand(userCommand)
+            }
+            
             // Search RAG index for relevant context
             val ragContext = retrieveRAGContext(userCommand)
             
@@ -111,6 +122,33 @@ class RAGAgentOrchestrator(
     }
     
     /**
+     * Enables RAG retrieval
+     */
+    fun enableRAG() {
+        ragEnabled = true
+        println("[RAG]: ✓ RAG enabled - questions will use indexed documents")
+        // Update system message to reflect RAG status
+        val systemMessage = createSystemMessage()
+        baseOrchestrator.setConversationHistory(listOf(systemMessage))
+    }
+    
+    /**
+     * Disables RAG retrieval (falls back to regular chat without RAG context)
+     */
+    fun disableRAG() {
+        ragEnabled = false
+        println("[RAG]: ✗ RAG disabled - questions will be answered without RAG context")
+        // Update system message to reflect RAG status
+        val systemMessage = createSystemMessage()
+        baseOrchestrator.setConversationHistory(listOf(systemMessage))
+    }
+    
+    /**
+     * Gets current RAG status
+     */
+    fun isRAGEnabled(): Boolean = ragEnabled
+    
+    /**
      * Retrieves relevant context from RAG index
      */
     private suspend fun retrieveRAGContext(query: String): String = withContext(Dispatchers.IO) {
@@ -133,8 +171,12 @@ class RAGAgentOrchestrator(
                 return@withContext ""
             }
             
-            println("[RAG]: Found ${results.size} relevant document chunks")
-            
+//            println("[RAG]: Found ${results.size} relevant document chunks")
+//            results.forEach {
+//                println("[RAG]: Found ${it}")
+//            }
+
+
             // Format context from search results
             val contextBuilder = StringBuilder()
             var totalChars = 0
@@ -177,14 +219,19 @@ class RAGAgentOrchestrator(
         val stats = ragPipeline.getStats()
         
         val systemPrompt = buildString {
-            appendLine("You are a helpful AI assistant with access to indexed documents through RAG (Retrieval-Augmented Generation).")
-            
-            if (stats.totalChunks > 0) {
-                appendLine("You have access to ${stats.totalChunks} indexed document chunks from ${stats.uniqueSources} source(s).")
-                appendLine("When answering questions, relevant context from these documents will be provided to you.")
-                appendLine("Use this context to provide accurate, document-based answers.")
+            if (ragEnabled) {
+                appendLine("You are a helpful AI assistant with access to indexed documents through RAG (Retrieval-Augmented Generation).")
+                
+                if (stats.totalChunks > 0) {
+                    appendLine("You have access to ${stats.totalChunks} indexed document chunks from ${stats.uniqueSources} source(s).")
+                    appendLine("When answering questions, relevant context from these documents will be provided to you.")
+                    appendLine("Use this context to provide accurate, document-based answers.")
+                } else {
+                    appendLine("Note: No documents are currently indexed. You can answer questions using your general knowledge.")
+                }
             } else {
-                appendLine("Note: No documents are currently indexed. You can answer questions using your general knowledge.")
+                appendLine("You are a helpful AI assistant.")
+                appendLine("Note: RAG (Retrieval-Augmented Generation) is currently disabled. Answer questions using your general knowledge.")
             }
             
             if (mcpClient != null) {

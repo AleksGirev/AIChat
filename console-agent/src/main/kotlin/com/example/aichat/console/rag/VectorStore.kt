@@ -122,7 +122,7 @@ class VectorStore(private val dbPath: String) {
             // If replaceExisting is true, delete old chunks from the same sources
             if (replaceExisting && chunks.isNotEmpty()) {
                 val sources = chunks.map { it.source }.distinct()
-                deleteChunksBySources(sources)
+                deleteChunksBySourcesInternal(sources)
             }
             
             chunks.forEachIndexed { index, chunk ->
@@ -132,39 +132,78 @@ class VectorStore(private val dbPath: String) {
             }
             connection.commit()
         } catch (e: Exception) {
-            connection.rollback()
+            try {
+                connection.rollback()
+            } catch (rollbackException: Exception) {
+                // Ignore rollback errors, but log them
+                System.err.println("Warning: Failed to rollback transaction: ${rollbackException.message}")
+            }
             throw Exception("Failed to store chunks: ${e.message}", e)
         } finally {
-            connection.autoCommit = true
+            try {
+                connection.autoCommit = true
+            } catch (e: Exception) {
+                // Ignore errors when resetting auto-commit
+                System.err.println("Warning: Failed to reset auto-commit: ${e.message}")
+            }
         }
     }
     
     /**
      * Deletes chunks by their source paths
      * This is used when reindexing documents to remove old versions
+     * Can be called standalone (manages its own transaction) or within an existing transaction
      */
     fun deleteChunksBySources(sources: List<String>) {
         if (sources.isEmpty()) return
         
-        connection.autoCommit = false
+        val wasInTransaction = !connection.autoCommit
+        if (!wasInTransaction) {
+            connection.autoCommit = false
+        }
+        
         try {
-            // Use parameterized query to prevent SQL injection
-            val placeholders = sources.map { "?" }.joinToString(",")
-            val sql = "DELETE FROM chunks WHERE source IN ($placeholders)"
+            deleteChunksBySourcesInternal(sources)
             
-            connection.prepareStatement(sql).use { stmt ->
-                sources.forEachIndexed { index, source ->
-                    stmt.setString(index + 1, source)
-                }
-                val deletedCount = stmt.executeUpdate()
-                println("[VectorStore]: Deleted $deletedCount old chunks from ${sources.size} source(s)")
+            if (!wasInTransaction) {
+                connection.commit()
             }
-            connection.commit()
         } catch (e: Exception) {
-            connection.rollback()
+            if (!wasInTransaction) {
+                try {
+                    connection.rollback()
+                } catch (rollbackException: Exception) {
+                    System.err.println("Warning: Failed to rollback transaction: ${rollbackException.message}")
+                }
+            }
             throw Exception("Failed to delete chunks by sources: ${e.message}", e)
         } finally {
-            connection.autoCommit = true
+            if (!wasInTransaction) {
+                try {
+                    connection.autoCommit = true
+                } catch (e: Exception) {
+                    System.err.println("Warning: Failed to reset auto-commit: ${e.message}")
+                }
+            }
+        }
+    }
+    
+    /**
+     * Internal method to delete chunks by sources (assumes transaction is already managed)
+     */
+    private fun deleteChunksBySourcesInternal(sources: List<String>) {
+        if (sources.isEmpty()) return
+        
+        // Use parameterized query to prevent SQL injection
+        val placeholders = sources.map { "?" }.joinToString(",")
+        val sql = "DELETE FROM chunks WHERE source IN ($placeholders)"
+        
+        connection.prepareStatement(sql).use { stmt ->
+            sources.forEachIndexed { index, source ->
+                stmt.setString(index + 1, source)
+            }
+            val deletedCount = stmt.executeUpdate()
+            println("[VectorStore]: Deleted $deletedCount old chunks from ${sources.size} source(s)")
         }
     }
     

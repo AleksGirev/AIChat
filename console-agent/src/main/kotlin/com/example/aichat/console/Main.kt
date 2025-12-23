@@ -127,8 +127,9 @@ fun main(args: Array<String>) {
             }
             
             println("[Agent]: Готов к работе!")
-            if (useRAG) {
+            if (useRAG && ragOrchestrator != null) {
                 println("[RAG]: RAG mode enabled - questions will be answered using indexed documents")
+                println("[RAG]: Use '/rag off' to disable RAG, '/rag on' to enable it")
             }
             println()
             
@@ -144,6 +145,38 @@ fun main(args: Array<String>) {
                         input.equals("exit", ignoreCase = true) -> {
                             running = false
                             println("[Agent]: Завершение работы...")
+                        }
+                        input.startsWith("/rag", ignoreCase = true) -> {
+                            // Handle RAG toggle commands
+                            if (ragOrchestrator == null) {
+                                println("[RAG]: RAG is not available (started without RAG mode)")
+                            } else {
+                                when {
+                                    input.equals("/rag on", ignoreCase = true) || 
+                                    input.equals("/rag enable", ignoreCase = true) -> {
+                                        ragOrchestrator.enableRAG()
+                                    }
+                                    input.equals("/rag off", ignoreCase = true) || 
+                                    input.equals("/rag disable", ignoreCase = true) -> {
+                                        ragOrchestrator.disableRAG()
+                                    }
+                                    input.equals("/rag status", ignoreCase = true) || 
+                                    input.equals("/rag", ignoreCase = true) -> {
+                                        val status = if (ragOrchestrator.isRAGEnabled()) "enabled" else "disabled"
+                                        println("[RAG]: Status: $status")
+                                        val stats = ragPipeline?.getStats()
+                                        if (stats != null) {
+                                            println("[RAG]: Index contains ${stats.totalChunks} chunks from ${stats.uniqueSources} source(s)")
+                                        }
+                                    }
+                                    else -> {
+                                        println("[RAG]: Unknown command. Use:")
+                                        println("  /rag on    - Enable RAG")
+                                        println("  /rag off   - Disable RAG")
+                                        println("  /rag status - Show RAG status")
+                                    }
+                                }
+                            }
                         }
                         else -> {
                             // Process command
