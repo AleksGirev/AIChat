@@ -147,10 +147,11 @@ fun main(args: Array<String>) {
                             println("[Agent]: Завершение работы...")
                         }
                         input.startsWith("/rag", ignoreCase = true) -> {
-                            // Handle RAG toggle commands
+                            // Handle RAG commands
                             if (ragOrchestrator == null) {
                                 println("[RAG]: RAG is not available (started without RAG mode)")
                             } else {
+                                val parts = input.split("\\s+".toRegex())
                                 when {
                                     input.equals("/rag on", ignoreCase = true) || 
                                     input.equals("/rag enable", ignoreCase = true) -> {
@@ -168,12 +169,81 @@ fun main(args: Array<String>) {
                                         if (stats != null) {
                                             println("[RAG]: Index contains ${stats.totalChunks} chunks from ${stats.uniqueSources} source(s)")
                                         }
+                                        println("[RAG]: Similarity threshold: ${String.format("%.2f", ragOrchestrator.minSimilarity)}")
+                                        println("[RAG]: Reranker threshold: ${String.format("%.2f", ragOrchestrator.rerankThresholdValue)}")
+                                        println("[RAG]: Reranker enabled: ${ragOrchestrator.useReranker}")
+                                    }
+                                    parts.size == 3 && parts[1].equals("threshold", ignoreCase = true) -> {
+                                        try {
+                                            val threshold = parts[2].toFloat()
+                                            ragOrchestrator.setSimilarityThreshold(threshold)
+                                        } catch (e: Exception) {
+                                            println("[RAG]: Invalid threshold value. Use a number between 0.0 and 1.0")
+                                        }
+                                    }
+                                    parts.size == 3 && parts[1].equals("rerank-threshold", ignoreCase = true) -> {
+                                        try {
+                                            val threshold = parts[2].toFloat()
+                                            ragOrchestrator.setRerankThreshold(threshold)
+                                        } catch (e: Exception) {
+                                            println("[RAG]: Invalid rerank threshold value. Use a number between 0.0 and 1.0")
+                                        }
+                                    }
+                                    parts.size == 3 && parts[1].equals("reranker", ignoreCase = true) -> {
+                                        when {
+                                            parts[2].equals("on", ignoreCase = true) || 
+                                            parts[2].equals("enable", ignoreCase = true) -> {
+                                                ragOrchestrator.setRerankerEnabled(true)
+                                            }
+                                            parts[2].equals("off", ignoreCase = true) || 
+                                            parts[2].equals("disable", ignoreCase = true) -> {
+                                                ragOrchestrator.setRerankerEnabled(false)
+                                            }
+                                            else -> {
+                                                println("[RAG]: Unknown reranker command. Use:")
+                                                println("  /rag reranker on  - Enable reranker")
+                                                println("  /rag reranker off - Disable reranker")
+                                            }
+                                        }
+                                    }
+                                    input.startsWith("/rag compare", ignoreCase = true) -> {
+                                        val query = input.removePrefix("/rag compare").trim()
+                                        if (query.isBlank()) {
+                                            println("[RAG]: Please provide a query to compare. Usage:")
+                                            println("  /rag compare <your question>")
+                                        } else {
+                                            println("[RAG]: Comparing answers with and without reranker filter...")
+                                            println("[RAG]: Query: $query")
+                                            println()
+                                            
+                                            val comparisonResult = ragOrchestrator.compareAnswersWithFilter(query)
+                                            if (comparisonResult.isSuccess) {
+                                                val result = comparisonResult.getOrThrow()
+                                                println("=".repeat(80))
+                                                println("ANSWER WITHOUT RERANKER FILTER:")
+                                                println("=".repeat(80))
+                                                println(result.answerWithoutFilter)
+                                                println()
+                                                println("=".repeat(80))
+                                                println("ANSWER WITH RERANKER FILTER (threshold: ${String.format("%.2f", result.rerankThreshold)}):")
+                                                println("=".repeat(80))
+                                                println(result.answerWithFilter)
+                                                println()
+                                                println("[RAG]: Comparison complete. Review both answers to evaluate quality.")
+                                            } else {
+                                                val error = comparisonResult.exceptionOrNull()
+                                                println("[RAG]: Failed to compare answers: ${error?.message}")
+                                            }
+                                        }
                                     }
                                     else -> {
-                                        println("[RAG]: Unknown command. Use:")
-                                        println("  /rag on    - Enable RAG")
-                                        println("  /rag off   - Disable RAG")
-                                        println("  /rag status - Show RAG status")
+                                        println("[RAG]: Unknown command. Available commands:")
+                                        println("  /rag on/off              - Enable/disable RAG")
+                                        println("  /rag status               - Show RAG status")
+                                        println("  /rag threshold <0.0-1.0>  - Set similarity threshold")
+                                        println("  /rag rerank-threshold <0.0-1.0> - Set reranker threshold")
+                                        println("  /rag reranker on/off      - Enable/disable reranker")
+                                        println("  /rag compare <query>      - Compare answers with/without filter")
                                     }
                                 }
                             }

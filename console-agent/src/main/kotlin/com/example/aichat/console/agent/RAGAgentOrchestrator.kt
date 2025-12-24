@@ -4,6 +4,7 @@ import com.example.aichat.console.llm.OpenAiClient
 import com.example.aichat.console.mcp.McpClientWrapper
 import com.example.aichat.console.model.ChatMessage
 import com.example.aichat.console.rag.RAGPipeline
+import com.example.aichat.console.rag.RelevanceReranker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -26,6 +27,7 @@ class RAGAgentOrchestrator(
     
     private val baseOrchestrator: AgentOrchestrator = AgentOrchestrator(llmClient, mcpClient)
     private var conversationHistory = mutableListOf<ChatMessage>()
+    private val reranker: RelevanceReranker = RelevanceReranker()
     
     /**
      * Whether RAG is currently enabled
@@ -39,9 +41,20 @@ class RAGAgentOrchestrator(
     var ragContextLimit: Int = 10
     
     /**
-     * Minimum similarity threshold for RAG results (0.0 to 1.0)
+     * Minimum similarity threshold for initial vector search (0.0 to 1.0)
      */
-    var minSimilarity: Float = 0.5f
+    var minSimilarity: Float = 0.3f
+    
+    /**
+     * Reranker threshold for second-stage filtering (0.0 to 1.0)
+     * Applied after initial vector search
+     */
+    var rerankThresholdValue: Float = 0.71f
+    
+    /**
+     * Whether to use reranker for second-stage filtering
+     */
+    var useReranker: Boolean = true
     
     /**
      * Maximum total characters from RAG context to include
@@ -149,13 +162,14 @@ class RAGAgentOrchestrator(
     fun isRAGEnabled(): Boolean = ragEnabled
     
     /**
-     * Retrieves relevant context from RAG index
+     * Retrieves relevant context from RAG index with optional reranking
      */
     private suspend fun retrieveRAGContext(query: String): String = withContext(Dispatchers.IO) {
         try {
+            // First stage: vector similarity search
             val searchResult = ragPipeline.search(
                 queryText = query,
-                limit = ragContextLimit,
+                limit = ragContextLimit * 2, // Get more results for reranking
                 minSimilarity = minSimilarity
             )
             
@@ -164,18 +178,33 @@ class RAGAgentOrchestrator(
                 return@withContext ""
             }
             
-            val results = searchResult.getOrThrow()
+            var results = searchResult.getOrThrow()
             
             if (results.isEmpty()) {
                 println("[RAG]: No relevant documents found for query")
                 return@withContext ""
+            } else {
+                println("RAG search result size ${results.size}")
             }
             
-//            println("[RAG]: Found ${results.size} relevant document chunks")
-//            results.forEach {
-//                println("[RAG]: Found ${it}")
-//            }
+            // Second stage: reranking/filtering
+            if (useReranker) {
+                results = reranker.rerank(
+                    results = results,
+                    rerankThreshold = rerankThresholdValue,
+                    maxResults = ragContextLimit
+                )
+                println("RAG rerank size ${results.size}")
 
+            } else {
+                // Just limit results if reranker is disabled
+                results = results.take(ragContextLimit)
+            }
+            
+            if (results.isEmpty()) {
+                println("[RAG]: No results passed reranking threshold")
+                return@withContext ""
+            }
 
             // Format context from search results
             val contextBuilder = StringBuilder()
@@ -210,6 +239,73 @@ class RAGAgentOrchestrator(
             println("[RAG]: Error retrieving context: ${e.message}")
             ""
         }
+    }
+    
+    /**
+     * Compares answer quality with and without reranker filter
+     * Returns both answers for comparison
+     */
+    suspend fun compareAnswersWithFilter(userCommand: String): Result<ComparisonResult> = withContext(Dispatchers.IO) {
+        try {
+            if (!ragEnabled) {
+                return@withContext Result.failure(Exception("RAG is disabled. Enable RAG first to compare answers."))
+            }
+            
+            // Get answer without reranker
+            val wasRerankerEnabled = useReranker
+            useReranker = false
+            val answerWithoutFilter = processCommand(userCommand)
+            useReranker = wasRerankerEnabled
+            
+            // Get answer with reranker
+            val answerWithFilter = processCommand(userCommand)
+            
+            if (answerWithoutFilter.isFailure || answerWithFilter.isFailure) {
+                return@withContext Result.failure(
+                    Exception("Failed to generate one or both answers: " +
+                        "${answerWithoutFilter.exceptionOrNull()?.message ?: ""} " +
+                        "${answerWithFilter.exceptionOrNull()?.message ?: ""}")
+                )
+            }
+            
+            Result.success(
+                ComparisonResult(
+                    query = userCommand,
+                    answerWithoutFilter = answerWithoutFilter.getOrThrow(),
+                    answerWithFilter = answerWithFilter.getOrThrow(),
+                    rerankThreshold = rerankThresholdValue,
+                    useReranker = useReranker
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Sets the similarity threshold for initial vector search
+     */
+    fun setSimilarityThreshold(threshold: Float) {
+        require(threshold in 0.0f..1.0f) { "Threshold must be between 0.0 and 1.0" }
+        minSimilarity = threshold
+        println("[RAG]: Similarity threshold set to ${String.format("%.2f", threshold)}")
+    }
+    
+    /**
+     * Sets the reranker threshold for second-stage filtering
+     */
+    fun setRerankThreshold(threshold: Float) {
+        require(threshold in 0.0f..1.0f) { "Threshold must be between 0.0 and 1.0" }
+        rerankThresholdValue = threshold
+        println("[RAG]: Reranker threshold set to ${String.format("%.2f", threshold)}")
+    }
+    
+    /**
+     * Enables or disables reranker
+     */
+    fun setRerankerEnabled(enabled: Boolean) {
+        useReranker = enabled
+        println("[RAG]: Reranker ${if (enabled) "enabled" else "disabled"}")
     }
     
     /**
@@ -262,4 +358,15 @@ class RAGAgentOrchestrator(
         baseOrchestrator.shutdown()
     }
 }
+
+/**
+ * Result of comparing answers with and without reranker filter
+ */
+data class ComparisonResult(
+    val query: String,
+    val answerWithoutFilter: String,
+    val answerWithFilter: String,
+    val rerankThreshold: Float,
+    val useReranker: Boolean
+)
 
