@@ -30,6 +30,11 @@ class RAGAgentOrchestrator(
     private val reranker: RelevanceReranker = RelevanceReranker()
     
     /**
+     * Last used sources from RAG search (for displaying to user)
+     */
+    private var lastUsedSources: List<String> = emptyList()
+    
+    /**
      * Whether RAG is currently enabled
      * When disabled, the orchestrator works like a regular AgentOrchestrator without RAG context
      */
@@ -96,11 +101,14 @@ class RAGAgentOrchestrator(
         try {
             // If RAG is disabled, use base orchestrator directly
             if (!ragEnabled) {
+                lastUsedSources = emptyList() // Clear sources when RAG is disabled
                 return@withContext baseOrchestrator.processCommand(userCommand)
             }
             
             // Search RAG index for relevant context
-            val ragContext = retrieveRAGContext(userCommand)
+            val ragContextResult = retrieveRAGContextWithSources(userCommand)
+            val ragContext = ragContextResult.first
+            lastUsedSources = ragContextResult.second // Store sources for display
             
             // Build enhanced user message with RAG context
             val enhancedUserMessage = if (ragContext.isNotEmpty()) {
@@ -135,6 +143,11 @@ class RAGAgentOrchestrator(
     }
     
     /**
+     * Gets the sources used in the last RAG search
+     */
+    fun getLastUsedSources(): List<String> = lastUsedSources
+    
+    /**
      * Enables RAG retrieval
      */
     fun enableRAG() {
@@ -163,8 +176,9 @@ class RAGAgentOrchestrator(
     
     /**
      * Retrieves relevant context from RAG index with optional reranking
+     * Returns pair of (context string, list of unique sources)
      */
-    private suspend fun retrieveRAGContext(query: String): String = withContext(Dispatchers.IO) {
+    private suspend fun retrieveRAGContextWithSources(query: String): Pair<String, List<String>> = withContext(Dispatchers.IO) {
         try {
             // First stage: vector similarity search
             val searchResult = ragPipeline.search(
@@ -175,14 +189,14 @@ class RAGAgentOrchestrator(
             
             if (searchResult.isFailure) {
                 println("[RAG]: Failed to search index: ${searchResult.exceptionOrNull()?.message}")
-                return@withContext ""
+                return@withContext Pair("", emptyList())
             }
             
             var results = searchResult.getOrThrow()
             
             if (results.isEmpty()) {
                 println("[RAG]: No relevant documents found for query")
-                return@withContext ""
+                return@withContext Pair("", emptyList())
             } else {
                 println("RAG search result size ${results.size}")
             }
@@ -203,21 +217,26 @@ class RAGAgentOrchestrator(
             
             if (results.isEmpty()) {
                 println("[RAG]: No results passed reranking threshold")
-                return@withContext ""
+                return@withContext Pair("", emptyList())
             }
 
-            // Format context from search results
+            // Format context from search results and collect unique sources
             val contextBuilder = StringBuilder()
+            val sourcesSet = mutableSetOf<String>()
             var totalChars = 0
             
             results.forEachIndexed { index, result ->
                 val chunk = result.chunk
                 val similarity = result.similarity
+                val sourceName = chunk.source.split("/").lastOrNull() ?: chunk.source
+                
+                // Add to sources set
+                sourcesSet.add(chunk.source)
                 
                 // Format: [Source: filename] (similarity: 0.85)
                 // Content...
                 val chunkText = """
-                    |[${index + 1}] Source: ${chunk.source.split("/").lastOrNull() ?: chunk.source} (relevance: ${String.format("%.2f", similarity)})
+                    |[${index + 1}] Source: $sourceName (relevance: ${String.format("%.2f", similarity)})
                     |${chunk.content}
                     |
                 """.trimMargin()
@@ -234,10 +253,13 @@ class RAGAgentOrchestrator(
                 totalChars += chunkChars
             }
             
-            contextBuilder.toString().trim()
+            val context = contextBuilder.toString().trim()
+            val sources = sourcesSet.map { it.split("/").lastOrNull() ?: it }.distinct().sorted()
+            
+            Pair(context, sources)
         } catch (e: Exception) {
             println("[RAG]: Error retrieving context: ${e.message}")
-            ""
+            Pair("", emptyList())
         }
     }
     

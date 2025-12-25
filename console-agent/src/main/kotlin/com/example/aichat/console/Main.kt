@@ -259,6 +259,18 @@ fun main(args: Array<String>) {
                             if (result.isSuccess) {
                                 val response = result.getOrThrow()
                                 println("[Agent]: $response")
+                                
+                                // Display sources if RAG was used
+                                if (useRAG && ragOrchestrator != null && ragOrchestrator.isRAGEnabled()) {
+                                    val sources = ragOrchestrator.getLastUsedSources()
+                                    if (sources.isNotEmpty()) {
+                                        println()
+                                        println("Источники:")
+                                        sources.forEachIndexed { index, source ->
+                                            println("  ${index + 1}. $source")
+                                        }
+                                    }
+                                }
                             } else {
                                 val error = result.exceptionOrNull()?.message ?: "Unknown error"
                                 println("[Agent]: Ошибка: $error")
