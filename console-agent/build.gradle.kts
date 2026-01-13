@@ -45,6 +45,16 @@ tasks.named<JavaExec>("run") {
     standardInput = System.`in`
 }
 
+// Task for running the Repo MCP Server
+tasks.register<JavaExec>("runRepoMcpServer") {
+    group = "application"
+    description = "Run the Repo MCP Server (for git/fs tools)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.aichat.console.mcp.repo.RepoMcpServerMainKt")
+    standardInput = System.`in`
+    standardOutput = System.out
+}
+
 // Task для запуска RAG примера
 tasks.register<JavaExec>("runRag") {
     group = "application"

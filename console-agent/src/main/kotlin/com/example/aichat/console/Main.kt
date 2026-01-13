@@ -2,6 +2,7 @@ package com.example.aichat.console
 
 import com.example.aichat.console.agent.AgentOrchestrator
 import com.example.aichat.console.agent.RAGAgentOrchestrator
+import com.example.aichat.console.help.HelpService
 import com.example.aichat.console.llm.OpenAiClient
 import com.example.aichat.console.mcp.McpClientFactory
 import com.example.aichat.console.mcp.McpClientWrapper
@@ -51,11 +52,14 @@ fun main(args: Array<String>) {
             folderId = folderId
         )
         
-        // Initialize
-        var mcpProcess: Process? = null
-        var orchestrator: AgentOrchestrator? = null
-        var ragOrchestrator: RAGAgentOrchestrator? = null
-        var ragPipeline: RAGPipeline? = null
+            // Initialize
+            var mcpProcess: Process? = null
+            var repoMcpProcess: Process? = null
+            var orchestrator: AgentOrchestrator? = null
+            var ragOrchestrator: RAGAgentOrchestrator? = null
+            var ragPipeline: RAGPipeline? = null
+            var helpService: HelpService? = null
+            var repoMcpClient: McpClientWrapper? = null
         
         try {
             println("[Agent]: Инициализация...")
@@ -75,6 +79,34 @@ fun main(args: Array<String>) {
                     dbPath = dbPath,
                     ollamaBaseUrl = ollamaBaseUrl,
                     ollamaModel = ollamaModel
+                )
+            }
+            
+            // Initialize repo MCP client for /help command
+            println("[Help]: Initializing repo MCP client for /help command...")
+            val repoMcpResult = try {
+                McpClientFactory.createRepoMcpClient()
+            } catch (e: Exception) {
+                println("[Help]: WARNING: Failed to start repo MCP server: ${e.message}")
+                println("[Help]: /help command will work without repo context")
+                Result.failure(e)
+            }
+            
+            if (repoMcpResult.isSuccess) {
+                val pair = repoMcpResult.getOrThrow()
+                repoMcpClient = pair.first
+                repoMcpProcess = pair.second
+                println("[Help]: ✓ Repo MCP client connected")
+            } else {
+                println("[Help]: ✗ Repo MCP client not available (continuing without it)")
+            }
+            
+            // Create HelpService if RAG is available
+            if (useRAG && ragPipeline != null) {
+                helpService = HelpService(
+                    llmClient = llmClient,
+                    ragPipeline = ragPipeline,
+                    repoMcpClient = repoMcpClient
                 )
             }
             
@@ -145,6 +177,33 @@ fun main(args: Array<String>) {
                         input.equals("exit", ignoreCase = true) -> {
                             running = false
                             println("[Agent]: Завершение работы...")
+                        }
+                        input.startsWith("/help", ignoreCase = true) -> {
+                            // Handle /help command
+                            val query = input.removePrefix("/help").trim()
+                            if (query.isBlank()) {
+                                println("[Help]: Usage: /help <your question>")
+                                println("[Help]: Example: /help How do we handle navigation in Compose?")
+                            } else {
+                                if (helpService == null) {
+                                    println("[Help]: Help service is not available. RAG must be enabled.")
+                                    println("[Help]: Start the console agent with RAG enabled (default)")
+                                } else {
+                                    println("[Help]: Processing your question...")
+                                    val result = helpService.processHelpQuery(query)
+                                    if (result.isSuccess) {
+                                        println()
+                                        println("=".repeat(80))
+                                        println("ANSWER:")
+                                        println("=".repeat(80))
+                                        println(result.getOrThrow())
+                                        println("=".repeat(80))
+                                    } else {
+                                        val error = result.exceptionOrNull()
+                                        println("[Help]: Error: ${error?.message ?: "Unknown error"}")
+                                    }
+                                }
+                            }
                         }
                         input.startsWith("/rag", ignoreCase = true) -> {
                             // Handle RAG commands
@@ -291,6 +350,8 @@ fun main(args: Array<String>) {
                 orchestrator?.shutdown()
                 ragPipeline?.close()
                 mcpProcess?.destroyForcibly() // Clean up MCP server process
+                repoMcpProcess?.destroyForcibly() // Clean up repo MCP server process
+                repoMcpClient?.disconnect()
             } catch (e: Exception) {
                 println("[Agent]: Error during shutdown: ${e.message}")
             }
