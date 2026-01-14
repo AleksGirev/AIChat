@@ -1,0 +1,84 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5  # Fail-safe timeout
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff calculation
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      
+      - name: Cache RAG index
+        uses: actions/cache@v4
+        with:
+          path: console-agent/rag_index.db
+          key: rag-index-${{ hashFiles('docs/**/*.md', 'README.md') }}
+          restore-keys: |
+            rag-index-
+      
+      - name: Build RAG index if missing
+        if: hashFiles('console-agent/rag_index.db') == ''
+        run: |
+          echo "RAG index not found. Building from documentation..."
+          # Start Ollama service (if available) or use remote embedding service
+          # For now, we'll skip if Ollama is not available
+          if command -v ollama &> /dev/null; then
+            ollama serve &
+            sleep 5
+            ./gradlew :console-agent:runRag -Prag.args="index docs/ README.md" || echo "RAG indexing failed, continuing without context"
+          else
+            echo "Ollama not available. Review will proceed without RAG context."
+          fi
+        continue-on-error: true
+      
+      - name: Run AI PR Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || 'https://api.openai.com/v1' }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL || 'gpt-4o' }}
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_FOLDER_ID }}
+          OLLAMA_BASE_URL: ${{ secrets.OLLAMA_BASE_URL || 'http://localhost:11434' }}
+          OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL || 'nomic-embed-text' }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          OWNER=${{ github.repository_owner }}
+          REPO=${{ github.event.repository.name }}
+          
+          echo "Running AI review for PR #$PR_NUMBER"
+          
+          # Run the PR review (fail-safe: continue on error to not block PR)
+          ./gradlew :console-agent:runPrReview \
+            -Pprreview.args="$PR_NUMBER $OWNER $REPO" \
+            || echo "Review generation failed, but not blocking PR"
+        continue-on-error: true
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "## AI PR Review Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Review process completed. Check PR comments for AI-generated feedback." >> $GITHUB_STEP_SUMMARY

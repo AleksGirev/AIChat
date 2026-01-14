@@ -68,6 +68,19 @@ tasks.register<JavaExec>("runRag") {
     } ?: emptyList()
 }
 
+// Task for running AI PR Review
+tasks.register<JavaExec>("runPrReview") {
+    group = "application"
+    description = "Run AI PR Review"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.aichat.console.prreview.AiPrReview")
+    
+    // Parse arguments from command line
+    args = project.findProperty("prreview.args")?.toString()?.let { argString ->
+        parseCommandLineArgs(argString)
+    } ?: emptyList()
+}
+
 // Helper function to parse command line arguments with quotes
 fun parseCommandLineArgs(argString: String): List<String> {
     val args = mutableListOf<String>()

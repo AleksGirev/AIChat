@@ -391,4 +391,3 @@ data class ComparisonResult(
     val rerankThreshold: Float,
     val useReranker: Boolean
 )
-
