@@ -22,6 +22,12 @@ interface ChatSessionDao {
     suspend fun getSessionById(sessionId: String): ChatSessionEntity?
     
     /**
+     * Get all sessions for a specific user
+     */
+    @Query("SELECT * FROM chat_sessions WHERE userId = :userId ORDER BY updatedAt DESC")
+    fun getSessionsByUserId(userId: String): Flow<List<ChatSessionEntity>>
+    
+    /**
      * Insert a new session
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)

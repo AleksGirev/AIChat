@@ -6,6 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.LaunchedEffect
+import com.example.aichat.data.auth.AuthManager
+import com.example.aichat.ui.auth.AuthScreen
 import com.example.aichat.ui.chat.ChatScreen
 import com.example.aichat.ui.chat.ChatListScreen
 import com.example.aichat.ui.comparison.ModelComparisonScreen
@@ -13,6 +16,7 @@ import com.example.aichat.ui.comparison.TokenComparisonScreen
 import com.example.aichat.ui.searchagent.SearchAgentScreen
 import com.example.aichat.ui.settings.SettingsScreen
 import com.example.aichat.ui.summary.WeatherSummaryScreen
+import com.example.aichat.ui.viewmodel.AuthViewModel
 import com.example.aichat.ui.viewmodel.ChatViewModel
 import com.example.aichat.ui.viewmodel.ModelComparisonViewModel
 import com.example.aichat.ui.viewmodel.TokenComparisonViewModel
@@ -23,6 +27,7 @@ import org.koin.compose.koinInject
  * Navigation state for the app
  */
 sealed class Screen {
+    object Auth : Screen()
     object Chat : Screen()
     object ChatList : Screen()
     object Settings : Screen()
@@ -41,13 +46,36 @@ sealed class Screen {
 @Composable
 fun AppNavigation(
     viewModel: ChatViewModel = koinViewModel(),
+    authViewModel: AuthViewModel = koinViewModel(),
     comparisonViewModel: ModelComparisonViewModel = viewModel(),
     tokenComparisonViewModel: TokenComparisonViewModel = viewModel(),
     initialScreen: Screen? = null
 ) {
-    var currentScreen by remember { mutableStateOf<Screen>(initialScreen ?: Screen.Chat) }
+    val authManager: AuthManager = koinInject()
+    val isAuthenticated = remember { mutableStateOf(authManager.isAuthenticated()) }
+    
+    // Check authentication state on startup
+    LaunchedEffect(Unit) {
+        isAuthenticated.value = authManager.isAuthenticated()
+    }
+    
+    // Determine initial screen based on authentication
+    var currentScreen by remember { 
+        mutableStateOf<Screen>(
+            initialScreen ?: if (isAuthenticated.value) Screen.Chat else Screen.Auth
+        )
+    }
     
     when (currentScreen) {
+        is Screen.Auth -> {
+            AuthScreen(
+                viewModel = authViewModel,
+                onAuthSuccess = {
+                    isAuthenticated.value = true
+                    currentScreen = Screen.Chat
+                }
+            )
+        }
         is Screen.Chat -> {
             ChatScreen(
                 viewModel = viewModel,

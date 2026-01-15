@@ -132,6 +132,65 @@ class ChatRepository(
     }
     
     /**
+     * Sends a support chat message with RAG + CRM context
+     * 
+     * @param userMessage The user's message
+     * @param conversationHistory Optional conversation history
+     * @param supportContextBuilder Optional SupportContextBuilder (if null, uses regular chat)
+     * @param model The model to use
+     * @param includeRagContext Whether to include RAG documentation context
+     * @return Result containing the assistant's response message or an error
+     */
+    suspend fun sendSupportMessage(
+        userMessage: String,
+        conversationHistory: List<ChatMessage> = emptyList(),
+        supportContextBuilder: com.example.aichat.data.support.SupportContextBuilder? = null,
+        model: String = Config.DEFAULT_YANDEXGPT_MODEL,
+        maxTokens: Int? = null,
+        temperature: Double? = null,
+        includeRagContext: Boolean = false
+    ): Result<String> {
+        val messages = conversationHistory.toMutableList()
+        
+        // Build support context if builder is provided
+        val supportContext = if (supportContextBuilder != null) {
+            supportContextBuilder.buildSupportContext(
+                userQuery = userMessage,
+                includeRagContext = includeRagContext,
+                maxTickets = 5
+            )
+        } else {
+            null
+        }
+        
+        // Enhance user message with support context
+        val enhancedMessage = if (supportContext != null && supportContext.isNotEmpty()) {
+            """
+            |$userMessage
+            |
+            |$supportContext
+            """.trimMargin()
+        } else {
+            userMessage
+        }
+        
+        messages.add(ChatMessage(role = "user", content = enhancedMessage))
+        
+        val result = sendChatRequest(messages, model, maxTokens, temperature)
+        
+        return if (result.isSuccess) {
+            val responseMessage = result.getOrNull()?.choices?.firstOrNull()?.message?.content
+            if (responseMessage != null) {
+                Result.success(responseMessage)
+            } else {
+                Result.failure(Exception("No response message in API response"))
+            }
+        } else {
+            Result.failure(result.exceptionOrNull() ?: Exception("Unknown error"))
+        }
+    }
+    
+    /**
      * Convenience method to send a single user message and get a response
      * 
      * @param userMessage The user's message

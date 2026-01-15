@@ -3,6 +3,8 @@ package com.example.aichat
 import android.app.Application
 import android.util.Log
 import com.example.aichat.data.brightdata.BrightDataMcpClient
+import com.example.aichat.data.crm.CrmMcpClient
+import com.example.aichat.data.rag.RagService
 import com.example.aichat.di.allModules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +47,12 @@ class AIChatApplication : Application() {
         
         // Initialize BrightData MCP server and log available tools
         initializeBrightDataMcp()
+        
+        // Initialize CRM MCP server for support service
+        initializeCrmMcp()
+        
+        // Initialize RAG documentation
+        initializeRagDocumentation()
         
         Log.d(TAG, "Application initialized successfully")
     }
@@ -119,6 +127,69 @@ class AIChatApplication : Application() {
                 Log.d(TAG, "=== BrightData MCP Server Initialization Complete ===")
             } catch (e: Exception) {
                 Log.e(TAG, "Exception during BrightData MCP initialization", e)
+            }
+        }
+    }
+    
+    /**
+     * Initializes CRM MCP server for support service.
+     * 
+     * This method:
+     * 1. Gets CrmMcpClient from Koin
+     * 2. Initializes connection to CRM MCP server
+     * 3. Logs initialization status
+     * 
+     * Runs in background scope to avoid blocking app startup.
+     */
+    private fun initializeCrmMcp() {
+        applicationScope.launch {
+            try {
+                val crmClient: CrmMcpClient = GlobalContext.get().get()
+                
+                Log.d(TAG, "=== CRM MCP Server Initialization ===")
+                
+                val initResult = crmClient.initialize()
+                if (initResult.isSuccess) {
+                    Log.d(TAG, "✓ CRM MCP server connected successfully")
+                } else {
+                    val error = initResult.exceptionOrNull()
+                    Log.w(TAG, "✗ Failed to connect to CRM MCP server: ${error?.message}", error)
+                    Log.w(TAG, "  Support mode will work without CRM context")
+                    Log.w(TAG, "  Check your CRM_MCP_BRIDGE_URL in Config.kt and ensure server is running")
+                }
+                
+                Log.d(TAG, "=== CRM MCP Server Initialization Complete ===")
+            } catch (e: Exception) {
+                Log.w(TAG, "Exception during CRM MCP initialization (non-critical)", e)
+                Log.w(TAG, "Support mode will work without CRM context")
+            }
+        }
+    }
+    
+    /**
+     * Initializes RAG documentation service.
+     * Copies product documentation from assets to app files directory for search.
+     */
+    private fun initializeRagDocumentation() {
+        applicationScope.launch {
+            try {
+                val ragService: RagService = GlobalContext.get().get()
+                
+                Log.d(TAG, "=== RAG Documentation Initialization ===")
+                
+                val initResult = ragService.initializeDocumentation()
+                if (initResult.isSuccess) {
+                    Log.d(TAG, "✓ RAG documentation initialized successfully")
+                } else {
+                    val error = initResult.exceptionOrNull()
+                    Log.w(TAG, "⚠ RAG documentation initialization warning: ${error?.message}", error)
+                    Log.w(TAG, "  Support mode will work without RAG context")
+                }
+                
+                Log.d(TAG, "=== RAG Documentation Initialization Complete ===")
+            } catch (e: Exception) {
+                Log.w(TAG, "Exception during RAG documentation initialization (non-critical)", e)
+                Log.w(TAG, "Support mode will work without RAG context")
             }
         }
     }

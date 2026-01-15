@@ -55,6 +55,38 @@ tasks.register<JavaExec>("runRepoMcpServer") {
     standardOutput = System.out
 }
 
+// Task for running the CRM MCP Server
+tasks.register<JavaExec>("runCrmMcpServer") {
+    group = "application"
+    description = "Run the CRM MCP Server (for support tickets)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.aichat.console.mcp.crm.CrmMcpServerMainKt")
+    standardInput = System.`in`
+    standardOutput = System.out
+}
+
+// Task to create a fat JAR for CRM MCP Server
+tasks.register<Jar>("crmMcpServerJar") {
+    group = "build"
+    description = "Create a fat JAR for CRM MCP Server"
+    archiveBaseName.set("crm-mcp-server")
+    archiveVersion.set("1.0.0")
+    
+    manifest {
+        attributes(
+            "Main-Class" to "com.example.aichat.console.mcp.crm.CrmMcpServerMainKt"
+        )
+    }
+    
+    // Include all dependencies
+    from(sourceSets["main"].output)
+    from({
+        configurations.runtimeClasspath.get().filter { it.name.endsWith("jar") }.map { zipTree(it) }
+    })
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 // Task для запуска RAG примера
 tasks.register<JavaExec>("runRag") {
     group = "application"

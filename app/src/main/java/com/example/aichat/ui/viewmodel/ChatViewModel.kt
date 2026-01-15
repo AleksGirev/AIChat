@@ -10,6 +10,7 @@ import com.example.aichat.data.local.ChatHistoryRepository
 import com.example.aichat.data.local.ChatSessionRepository
 import com.example.aichat.data.local.ChatSessionEntity
 import com.example.aichat.data.local.ExternalMemoryRepository
+import com.example.aichat.data.support.SupportContextBuilder
 import com.example.aichat.data.mcp.McpConfig
 import com.example.aichat.data.mcp.McpFactory
 import com.example.aichat.data.mcp.McpRepository
@@ -39,6 +40,7 @@ import java.util.UUID
  * @param injectedHistoryRepository Optional injected ChatHistoryRepository (from Koin)
  * @param injectedSessionRepository Optional injected ChatSessionRepository (from Koin)
  * @param injectedExternalMemoryRepository Optional injected ExternalMemoryRepository (from Koin)
+ * @param injectedSupportContextBuilder Optional injected SupportContextBuilder (from Koin)
  */
 class ChatViewModel(
     application: Application,
@@ -46,7 +48,8 @@ class ChatViewModel(
     private val injectedMcpRepository: McpRepository? = null,
     private val injectedHistoryRepository: ChatHistoryRepository? = null,
     private val injectedSessionRepository: ChatSessionRepository? = null,
-    private val injectedExternalMemoryRepository: ExternalMemoryRepository? = null
+    private val injectedExternalMemoryRepository: ExternalMemoryRepository? = null,
+    private val injectedSupportContextBuilder: SupportContextBuilder? = null
 ) : AndroidViewModel(application) {
     
     // Create dependencies if not injected (backward compatibility)
@@ -128,6 +131,13 @@ class ChatViewModel(
     
     private val _systemPrompt = MutableStateFlow("")
     val systemPrompt: StateFlow<String> = _systemPrompt.asStateFlow()
+    
+    // Support mode: when enabled, uses SupportContextBuilder for context-aware responses
+    private val _supportMode = MutableStateFlow(false)
+    val supportMode: StateFlow<Boolean> = _supportMode.asStateFlow()
+    
+    // Support context builder (optional, injected via Koin)
+    private val supportContextBuilder: SupportContextBuilder? = injectedSupportContextBuilder
     
     init {
         // Create a new session on initialization if none exists
@@ -339,6 +349,14 @@ class ChatViewModel(
     }
     
     /**
+     * Enable or disable support mode
+     * When enabled, messages will include RAG documentation and CRM ticket context
+     */
+    fun setSupportMode(enabled: Boolean) {
+        _supportMode.value = enabled
+    }
+    
+    /**
      * Sends a user message and gets response from the model
      */
     fun sendMessage(messageText: String) {
@@ -410,7 +428,29 @@ class ChatViewModel(
                             append(sessionSummary)
                         }
                         
-                        // Add system prompt if set
+                        // Add support-specific system prompt when support mode is enabled
+                        if (_supportMode.value) {
+                            if (length > 0) {
+                                append("\n\n")
+                            }
+                            append("""
+                                |You are a helpful support assistant for AIChat application.
+                                |When answering user questions:
+                                |1. Use the provided product documentation to give accurate information
+                                |2. ALWAYS mention the ticket number when referencing user's previous tickets (e.g., "Based on your Ticket #ticket1", "As mentioned in Ticket #ticket2")
+                                |3. Use the format "Ticket #[NUMBER]" when referring to specific tickets
+                                |4. Reference the user's previous support tickets if they relate to the current question
+                                |5. Provide personalized responses based on the user's ticket history
+                                |6. If the user asks about an issue they've reported before, ALWAYS mention the ticket number
+                                |7. Be helpful, clear, and concise
+                                |
+                                |IMPORTANT: Always include ticket numbers (e.g., Ticket #ticket1, Ticket #ticket2) when referencing the user's previous support tickets.
+                                |
+                                |The user's question and relevant context will be provided below.
+                            """.trimMargin())
+                        }
+                        
+                        // Add custom system prompt if set
                         if (_systemPrompt.value.isNotBlank()) {
                             if (length > 0) {
                                 append("\n\n")
@@ -424,8 +464,37 @@ class ChatViewModel(
                         add(ChatMessage(role = "system", content = systemContent))
                     }
                     
-                    // Add current user message
-                    add(ChatMessage(role = "user", content = messageText.trim()))
+                    // Add current user message (with support context if enabled)
+                    val userMessageContent = if (_supportMode.value && supportContextBuilder != null) {
+                        Log.d("GIREV", "=== ChatViewModel: Support mode enabled ===")
+                        Log.d("GIREV", "Building support context for: ${messageText.trim()}")
+                        
+                        // Build support context and enhance user message
+                        val supportContext = supportContextBuilder.buildSupportContext(
+                            userQuery = messageText.trim(),
+                            includeRagContext = true, // Enable RAG documentation search
+                            maxTickets = 5
+                        )
+                        
+                        if (supportContext.isNotEmpty()) {
+                            Log.d("GIREV", "✓ Support context built: ${supportContext.length} chars")
+                            Log.d("GIREV", "Enhanced user message with context")
+                            """
+                            |${messageText.trim()}
+                            |
+                            |$supportContext
+                            """.trimMargin()
+                        } else {
+                            Log.d("GIREV", "✗ Support context is empty, using original message")
+                            messageText.trim()
+                        }
+                    } else {
+                        if (_supportMode.value) {
+                            Log.d("GIREV", "✗ Support mode enabled but supportContextBuilder is null")
+                        }
+                        messageText.trim()
+                    }
+                    add(ChatMessage(role = "user", content = userMessageContent))
                 }
                 
                 // Send API request

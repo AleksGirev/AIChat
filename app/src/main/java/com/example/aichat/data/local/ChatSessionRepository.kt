@@ -24,12 +24,20 @@ class ChatSessionRepository(
     }
     
     /**
+     * Get all sessions for a specific user
+     */
+    fun getSessionsByUserId(userId: String): Flow<List<ChatSessionEntity>> {
+        return sessionDao.getSessionsByUserId(userId)
+    }
+    
+    /**
      * Create a new session
      */
     suspend fun createSession(
         id: String,
         title: String,
-        summary: String? = null
+        summary: String? = null,
+        userId: String? = null
     ): ChatSessionEntity {
         val session = ChatSessionEntity(
             id = id,
@@ -38,7 +46,8 @@ class ChatSessionRepository(
             updatedAt = System.currentTimeMillis(),
             summary = summary,
             messageCount = 0,
-            lastMessagePreview = null
+            lastMessagePreview = null,
+            userId = userId
         )
         sessionDao.insertSession(session)
         return session

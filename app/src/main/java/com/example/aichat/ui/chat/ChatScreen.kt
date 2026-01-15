@@ -12,9 +12,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.aichat.data.auth.AuthManager
+import com.example.aichat.data.local.UserRepository
 import com.example.aichat.service.WeatherService
 import com.example.aichat.ui.model.UiMessage
 import com.example.aichat.ui.viewmodel.ChatViewModel
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -35,11 +38,29 @@ fun ChatScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     val modelName by viewModel.modelName.collectAsStateWithLifecycle()
+    val supportMode by viewModel.supportMode.collectAsStateWithLifecycle()
     
     // Weather service for summary snackbars
     val weatherService: WeatherService = koinInject()
     val shouldShowSummary by weatherService.shouldShowSummary.collectAsStateWithLifecycle()
     val summaryText by weatherService.summaryText.collectAsStateWithLifecycle()
+    
+    // Auth and user info
+    val authManager: AuthManager = koinInject()
+    val userRepository: UserRepository = koinInject()
+    val scope = rememberCoroutineScope()
+    var currentUsername by remember { mutableStateOf<String?>(null) }
+    
+    // Load user info
+    LaunchedEffect(Unit) {
+        val userId = authManager.getUserId()
+        if (userId != null) {
+            scope.launch {
+                val user = userRepository.getUserById(userId)
+                currentUsername = user?.username
+            }
+        }
+    }
     
     var inputText by remember { mutableStateOf(TextFieldValue("")) }
     var showModelSelector by remember { mutableStateOf(false) }
@@ -85,6 +106,32 @@ fun ChatScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        // Show user info and support mode
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            currentUsername?.let { username ->
+                                Text(
+                                    text = "@$username",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (supportMode) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = MaterialTheme.shapes.small
+                                ) {
+                                    Text(
+                                        text = "Support Mode",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 },
                 actions = {
@@ -114,6 +161,12 @@ fun ChatScreen(
                     // Search Agent button
                     TextButton(onClick = onSearchAgentClick) {
                         Text("Search")
+                    }
+                    // Support mode toggle
+                    IconButton(
+                        onClick = { viewModel.setSupportMode(!supportMode) }
+                    ) {
+                        Text(if (supportMode) "🛟" else "💬", style = MaterialTheme.typography.titleLarge)
                     }
                     // Settings button
                     IconButton(onClick = onSettingsClick) {

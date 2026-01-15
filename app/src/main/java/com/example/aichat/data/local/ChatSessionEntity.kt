@@ -17,6 +17,7 @@ data class ChatSessionEntity(
     val summary: String? = null, // Summary of previous messages in this session
     val messageCount: Int = 0, // Number of messages in this session
     val lastMessagePreview: String? = null, // Preview of the last message
-    val lastSummarizedTimestamp: Long? = null // Timestamp of the last message that was included in summary
+    val lastSummarizedTimestamp: Long? = null, // Timestamp of the last message that was included in summary
+    val userId: String? = null // ID of the user who owns this session (nullable for backward compatibility)
 )
 

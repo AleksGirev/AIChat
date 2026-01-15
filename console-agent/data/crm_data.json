@@ -1,0 +1,270 @@
+{
+  "users": [
+    {
+      "userId": "user1",
+      "email": "user1@example.com",
+      "username": "user1",
+      "createdAt": 1704067200000
+    },
+    {
+      "userId": "user2",
+      "email": "user2@example.com",
+      "username": "user2",
+      "createdAt": 1704153600000
+    },
+    {
+      "userId": "user3",
+      "email": "user3@example.com",
+      "username": "user3",
+      "createdAt": 1704240000000
+    }
+  ],
+  "tickets": [
+    {
+      "ticketId": "ticket1",
+      "userId": "user1",
+      "title": "Authorization not working",
+      "description": "I cannot log in to the application. Getting 401 errors.",
+      "status": "open",
+      "priority": "high",
+      "createdAt": 1704300000000,
+      "updatedAt": 1704300000000,
+      "messages": [
+        {
+          "messageId": "msg1",
+          "sender": "user",
+          "content": "Why isn't authorization working? I keep getting 401 errors when trying to log in.",
+          "timestamp": 1704300000000
+        },
+        {
+          "messageId": "msg2",
+          "sender": "support",
+          "content": "We're investigating the issue. Can you check if your API token is still valid?",
+          "timestamp": 1704300100000
+        },
+        {
+          "messageId": "msg3",
+          "sender": "user",
+          "content": "I checked and the token seems valid. The issue started yesterday.",
+          "timestamp": 1704300200000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket2",
+      "userId": "user1",
+      "title": "API rate limit exceeded",
+      "description": "Getting rate limit errors when making API calls",
+      "status": "closed",
+      "priority": "medium",
+      "createdAt": 1704200000000,
+      "updatedAt": 1704210000000,
+      "messages": [
+        {
+          "messageId": "msg4",
+          "sender": "user",
+          "content": "I'm getting rate limit errors. How can I increase my quota?",
+          "timestamp": 1704200000000
+        },
+        {
+          "messageId": "msg5",
+          "sender": "support",
+          "content": "You can upgrade your plan or wait for the rate limit to reset. The limit resets every hour.",
+          "timestamp": 1704201000000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket3",
+      "userId": "user1",
+      "title": "Feature request: Dark mode",
+      "description": "Would like to have a dark mode option in the app",
+      "status": "in-progress",
+      "priority": "low",
+      "createdAt": 1704100000000,
+      "updatedAt": 1704110000000,
+      "messages": [
+        {
+          "messageId": "msg6",
+          "sender": "user",
+          "content": "Can you add a dark mode feature?",
+          "timestamp": 1704100000000
+        },
+        {
+          "messageId": "msg7",
+          "sender": "support",
+          "content": "Thank you for the suggestion! We're considering this for a future release.",
+          "timestamp": 1704101000000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket7",
+      "userId": "user1",
+      "title": "Database migration error",
+      "description": "App crashes on startup after update. Getting database migration error.",
+      "status": "open",
+      "priority": "high",
+      "createdAt": 1704320000000,
+      "updatedAt": 1704320000000,
+      "messages": [
+        {
+          "messageId": "msg13",
+          "sender": "user",
+          "content": "The app crashes immediately after updating. Error says database migration failed.",
+          "timestamp": 1704320000000
+        },
+        {
+          "messageId": "msg14",
+          "sender": "support",
+          "content": "This is a known issue with version 8 migration. Try clearing app data and reinstalling.",
+          "timestamp": 1704320100000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket8",
+      "userId": "user1",
+      "title": "MCP tools not working",
+      "description": "MCP tools are not available in chat. Getting connection errors.",
+      "status": "open",
+      "priority": "medium",
+      "createdAt": 1704330000000,
+      "updatedAt": 1704330000000,
+      "messages": [
+        {
+          "messageId": "msg15",
+          "sender": "user",
+          "content": "I can't use MCP tools. The connection to MCP server keeps failing.",
+          "timestamp": 1704330000000
+        },
+        {
+          "messageId": "msg16",
+          "sender": "support",
+          "content": "Please check if the MCP server is running and the URL is correct in Config.kt",
+          "timestamp": 1704330100000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket9",
+      "userId": "user1",
+      "title": "Slow response times",
+      "description": "Chat responses are very slow, taking 30+ seconds",
+      "status": "closed",
+      "priority": "medium",
+      "createdAt": 1704280000000,
+      "updatedAt": 1704290000000,
+      "messages": [
+        {
+          "messageId": "msg17",
+          "sender": "user",
+          "content": "Why are responses so slow? Sometimes it takes over 30 seconds.",
+          "timestamp": 1704280000000
+        },
+        {
+          "messageId": "msg18",
+          "sender": "support",
+          "content": "This can happen with large message history or when RAG is enabled. Try reducing message history length.",
+          "timestamp": 1704281000000
+        },
+        {
+          "messageId": "msg19",
+          "sender": "user",
+          "content": "Thanks, that helped!",
+          "timestamp": 1704290000000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket10",
+      "userId": "user1",
+      "title": "Token usage too high",
+      "description": "API costs are very high due to excessive token usage",
+      "status": "open",
+      "priority": "low",
+      "createdAt": 1704340000000,
+      "updatedAt": 1704340000000,
+      "messages": [
+        {
+          "messageId": "msg20",
+          "sender": "user",
+          "content": "My API costs are very high. How can I reduce token usage?",
+          "timestamp": 1704340000000
+        },
+        {
+          "messageId": "msg21",
+          "sender": "support",
+          "content": "Enable message compression, reduce RAG context size, and limit message history. Check the settings screen.",
+          "timestamp": 1704340100000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket4",
+      "userId": "user2",
+      "title": "Documentation question",
+      "description": "Need help understanding the API documentation",
+      "status": "open",
+      "priority": "low",
+      "createdAt": 1704250000000,
+      "updatedAt": 1704250000000,
+      "messages": [
+        {
+          "messageId": "msg8",
+          "sender": "user",
+          "content": "Can you explain how to use the search API?",
+          "timestamp": 1704250000000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket5",
+      "userId": "user2",
+      "title": "Bug: Messages not saving",
+      "description": "Chat messages are not being saved to the database",
+      "status": "open",
+      "priority": "high",
+      "createdAt": 1704260000000,
+      "updatedAt": 1704260000000,
+      "messages": [
+        {
+          "messageId": "msg9",
+          "sender": "user",
+          "content": "My chat messages disappear after closing the app. They're not being saved.",
+          "timestamp": 1704260000000
+        },
+        {
+          "messageId": "msg10",
+          "sender": "support",
+          "content": "We're looking into this database issue. Can you check your app permissions?",
+          "timestamp": 1704260100000
+        }
+      ]
+    },
+    {
+      "ticketId": "ticket6",
+      "userId": "user3",
+      "title": "RAG search not working",
+      "description": "RAG search returns no results even though documents are indexed",
+      "status": "in-progress",
+      "priority": "medium",
+      "createdAt": 1704270000000,
+      "updatedAt": 1704271000000,
+      "messages": [
+        {
+          "messageId": "msg11",
+          "sender": "user",
+          "content": "RAG search is not finding any documents. I've indexed my docs but search returns empty.",
+          "timestamp": 1704270000000
+        },
+        {
+          "messageId": "msg12",
+          "sender": "support",
+          "content": "Please verify that the vector database is properly initialized. Check the RAG pipeline logs.",
+          "timestamp": 1704271000000
+        }
+      ]
+    }
+  ]
+}

@@ -14,10 +14,11 @@ retrofit = "2.9.0"
 okhttp = "4.12.0"
 gson = "2.10.1"
 coroutines = "1.7.3"
-room = "2.6.1"
+room = "2.7.0"
 securityCrypto = "1.1.0-alpha06"
 workManager = "2.9.0"
 koin = "3.5.3"
+ksp = "2.2.0-1.0.25"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -62,4 +63,5 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 
