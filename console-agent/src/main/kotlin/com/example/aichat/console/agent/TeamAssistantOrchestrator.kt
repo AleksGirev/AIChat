@@ -7,25 +7,27 @@ import com.example.aichat.console.rag.RAGPipeline
 import com.example.aichat.console.rag.RelevanceReranker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
- * RAG-enhanced agent orchestrator
- * Combines RAG (Retrieval-Augmented Generation) with LLM for context-aware responses
+ * Team Assistant Orchestrator
+ * Combines RAG (Retrieval-Augmented Generation) with Tasks MCP for team task management
  * 
  * Flow:
- * 1. User asks a question
- * 2. Search RAG index for relevant documents
- * 3. Format context from search results
- * 4. Send query + context to LLM
- * 5. Return LLM response
+ * 1. User asks a question or requests task operation
+ * 2. Search RAG index for relevant project documentation (if question about project)
+ * 3. Use Tasks MCP tools for task management operations
+ * 4. Combine RAG context + task context in system prompt
+ * 5. Send enhanced prompt to LLM
+ * 6. Return contextualized response
  */
-class RAGAgentOrchestrator(
+class TeamAssistantOrchestrator(
     private val llmClient: OpenAiClient,
     private val ragPipeline: RAGPipeline,
-    private val mcpClient: McpClientWrapper? = null
+    private val tasksMcpClient: McpClientWrapper? = null
 ) {
     
-    private val baseOrchestrator: AgentOrchestrator = AgentOrchestrator(llmClient, mcpClient)
+    private val baseOrchestrator: AgentOrchestrator = AgentOrchestrator(llmClient, tasksMcpClient)
     private var conversationHistory = mutableListOf<ChatMessage>()
     private val reranker: RelevanceReranker = RelevanceReranker()
     
@@ -36,7 +38,6 @@ class RAGAgentOrchestrator(
     
     /**
      * Whether RAG is currently enabled
-     * When disabled, the orchestrator works like a regular AgentOrchestrator without RAG context
      */
     var ragEnabled: Boolean = true
     
@@ -52,7 +53,6 @@ class RAGAgentOrchestrator(
     
     /**
      * Reranker threshold for second-stage filtering (0.0 to 1.0)
-     * Applied after initial vector search
      */
     var rerankThresholdValue: Float = 0.71f
     
@@ -67,11 +67,16 @@ class RAGAgentOrchestrator(
     var maxContextChars: Int = 4000
     
     /**
+     * Path to team assistant prompt file
+     */
+    private val promptFilePath: String = "docs/team-assistant-prompt-en.md"
+    
+    /**
      * Initializes the orchestrator
      */
     suspend fun initialize(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            // Initialize base orchestrator (for MCP tools)
+            // Initialize base orchestrator (for Tasks MCP tools)
             baseOrchestrator.initialize()
             
             // Check RAG index
@@ -83,10 +88,13 @@ class RAGAgentOrchestrator(
                 println("[RAG]: ✓ Index contains ${stats.totalChunks} chunks from ${stats.uniqueSources} source(s)")
             }
             
-            // Create system message with RAG instructions
+            // Load team assistant prompt
             val systemMessage = createSystemMessage()
             conversationHistory.clear()
             conversationHistory.add(systemMessage)
+            
+            // Set system message in base orchestrator
+            baseOrchestrator.setConversationHistory(listOf(systemMessage))
             
             Result.success(Unit)
         } catch (e: Exception) {
@@ -95,27 +103,30 @@ class RAGAgentOrchestrator(
     }
     
     /**
-     * Processes a user command with RAG-enhanced context (if RAG is enabled)
+     * Processes a user command with RAG-enhanced context (if RAG is enabled and question is about project)
      */
     suspend fun processCommand(userCommand: String): Result<String> = withContext(Dispatchers.IO) {
         try {
-            // If RAG is disabled, use base orchestrator directly
-            if (!ragEnabled) {
-                lastUsedSources = emptyList() // Clear sources when RAG is disabled
+            // Determine if this is a question about the project (should use RAG)
+            val isProjectQuestion = isProjectRelatedQuestion(userCommand)
+            
+            // If RAG is disabled or not a project question, use base orchestrator directly
+            if (!ragEnabled || !isProjectQuestion) {
+                lastUsedSources = emptyList()
                 return@withContext baseOrchestrator.processCommand(userCommand)
             }
             
             // Search RAG index for relevant context
             val ragContextResult = retrieveRAGContextWithSources(userCommand)
             val ragContext = ragContextResult.first
-            lastUsedSources = ragContextResult.second // Store sources for display
+            lastUsedSources = ragContextResult.second
             
             // Build enhanced user message with RAG context
             val enhancedUserMessage = if (ragContext.isNotEmpty()) {
                 """
                 |$userCommand
                 |
-                |[Relevant context from indexed documents:]
+                |[Relevant context from indexed project documentation:]
                 |$ragContext
                 |
                 |Please use the provided context to answer the question. If the context doesn't contain relevant information, 
@@ -125,8 +136,7 @@ class RAGAgentOrchestrator(
                 userCommand
             }
             
-            // Use base orchestrator to process (it handles LLM + MCP tools)
-            // The base orchestrator will add the message to its history
+            // Use base orchestrator to process (it handles LLM + Tasks MCP tools)
             val result = baseOrchestrator.processCommand(enhancedUserMessage)
             
             // Update our conversation history
@@ -143,36 +153,37 @@ class RAGAgentOrchestrator(
     }
     
     /**
+     * Determines if a question is about the project (should use RAG)
+     */
+    private fun isProjectRelatedQuestion(query: String): Boolean {
+        val lowerQuery = query.lowercase()
+        
+        // Task management commands don't need RAG
+        val taskKeywords = listOf(
+            "create task", "show tasks", "get tasks", "list tasks",
+            "update task", "task status", "project status", "priority",
+            "assignee", "what should i do", "recommend"
+        )
+        
+        if (taskKeywords.any { lowerQuery.contains(it) }) {
+            return false // Task management - use MCP tools, not RAG
+        }
+        
+        // Project-related questions should use RAG
+        val projectKeywords = listOf(
+            "how does", "what is", "explain", "architecture", "implementation",
+            "how to", "where is", "why does", "code", "file", "function",
+            "class", "module", "database", "api", "authentication", "rag",
+            "mcp", "documentation"
+        )
+        
+        return projectKeywords.any { lowerQuery.contains(it) }
+    }
+    
+    /**
      * Gets the sources used in the last RAG search
      */
     fun getLastUsedSources(): List<String> = lastUsedSources
-    
-    /**
-     * Enables RAG retrieval
-     */
-    fun enableRAG() {
-        ragEnabled = true
-        println("[RAG]: ✓ RAG enabled - questions will use indexed documents")
-        // Update system message to reflect RAG status
-        val systemMessage = createSystemMessage()
-        baseOrchestrator.setConversationHistory(listOf(systemMessage))
-    }
-    
-    /**
-     * Disables RAG retrieval (falls back to regular chat without RAG context)
-     */
-    fun disableRAG() {
-        ragEnabled = false
-        println("[RAG]: ✗ RAG disabled - questions will be answered without RAG context")
-        // Update system message to reflect RAG status
-        val systemMessage = createSystemMessage()
-        baseOrchestrator.setConversationHistory(listOf(systemMessage))
-    }
-    
-    /**
-     * Gets current RAG status
-     */
-    fun isRAGEnabled(): Boolean = ragEnabled
     
     /**
      * Retrieves relevant context from RAG index with optional reranking
@@ -198,7 +209,7 @@ class RAGAgentOrchestrator(
                 println("[RAG]: No relevant documents found for query")
                 return@withContext Pair("", emptyList())
             } else {
-                println("RAG search result size ${results.size}")
+                println("[RAG]: Found ${results.size} relevant document chunks")
             }
             
             // Second stage: reranking/filtering
@@ -208,8 +219,7 @@ class RAGAgentOrchestrator(
                     rerankThreshold = rerankThresholdValue,
                     maxResults = ragContextLimit
                 )
-                println("RAG rerank size ${results.size}")
-
+                println("[RAG]: After reranking: ${results.size} chunks")
             } else {
                 // Just limit results if reranker is disabled
                 results = results.take(ragContextLimit)
@@ -264,102 +274,75 @@ class RAGAgentOrchestrator(
     }
     
     /**
-     * Compares answer quality with and without reranker filter
-     * Returns both answers for comparison
-     */
-    suspend fun compareAnswersWithFilter(userCommand: String): Result<ComparisonResult> = withContext(Dispatchers.IO) {
-        try {
-            if (!ragEnabled) {
-                return@withContext Result.failure(Exception("RAG is disabled. Enable RAG first to compare answers."))
-            }
-            
-            // Get answer without reranker
-            val wasRerankerEnabled = useReranker
-            useReranker = false
-            val answerWithoutFilter = processCommand(userCommand)
-            useReranker = wasRerankerEnabled
-            
-            // Get answer with reranker
-            val answerWithFilter = processCommand(userCommand)
-            
-            if (answerWithoutFilter.isFailure || answerWithFilter.isFailure) {
-                return@withContext Result.failure(
-                    Exception("Failed to generate one or both answers: " +
-                        "${answerWithoutFilter.exceptionOrNull()?.message ?: ""} " +
-                        "${answerWithFilter.exceptionOrNull()?.message ?: ""}")
-                )
-            }
-            
-            Result.success(
-                ComparisonResult(
-                    query = userCommand,
-                    answerWithoutFilter = answerWithoutFilter.getOrThrow(),
-                    answerWithFilter = answerWithFilter.getOrThrow(),
-                    rerankThreshold = rerankThresholdValue,
-                    useReranker = useReranker
-                )
-            )
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * Sets the similarity threshold for initial vector search
-     */
-    fun setSimilarityThreshold(threshold: Float) {
-        require(threshold in 0.0f..1.0f) { "Threshold must be between 0.0 and 1.0" }
-        minSimilarity = threshold
-        println("[RAG]: Similarity threshold set to ${String.format("%.2f", threshold)}")
-    }
-    
-    /**
-     * Sets the reranker threshold for second-stage filtering
-     */
-    fun setRerankThreshold(threshold: Float) {
-        require(threshold in 0.0f..1.0f) { "Threshold must be between 0.0 and 1.0" }
-        rerankThresholdValue = threshold
-        println("[RAG]: Reranker threshold set to ${String.format("%.2f", threshold)}")
-    }
-    
-    /**
-     * Enables or disables reranker
-     */
-    fun setRerankerEnabled(enabled: Boolean) {
-        useReranker = enabled
-        println("[RAG]: Reranker ${if (enabled) "enabled" else "disabled"}")
-    }
-    
-    /**
-     * Creates system message with RAG instructions
+     * Creates system message with team assistant prompt
      */
     private fun createSystemMessage(): ChatMessage {
-        val stats = ragPipeline.getStats()
-        
-        val systemPrompt = buildString {
-            if (ragEnabled) {
-                appendLine("You are a helpful AI assistant with access to indexed documents through RAG (Retrieval-Augmented Generation).")
-                
-                if (stats.totalChunks > 0) {
-                    appendLine("You have access to ${stats.totalChunks} indexed document chunks from ${stats.uniqueSources} source(s).")
-                    appendLine("When answering questions, relevant context from these documents will be provided to you.")
-                    appendLine("Use this context to provide accurate, document-based answers.")
-                } else {
-                    appendLine("Note: No documents are currently indexed. You can answer questions using your general knowledge.")
+        // Try to load prompt from file
+        val promptContent = try {
+            val possiblePaths = listOf(
+                File("console-agent/$promptFilePath"),
+                File(promptFilePath),
+                File("../$promptFilePath"),
+                File("docs/team-assistant-prompt-en.md")
+            )
+            
+            var loaded = false
+            var content = ""
+            
+            for (path in possiblePaths) {
+                if (path.exists() && path.isFile) {
+                    content = path.readText()
+                    loaded = true
+                    println("[Team Assistant]: Loaded prompt from: ${path.absolutePath}")
+                    break
                 }
+            }
+            
+            if (!loaded) {
+                println("[Team Assistant]: ⚠ Prompt file not found, using default prompt")
+                getDefaultPrompt()
             } else {
-                appendLine("You are a helpful AI assistant.")
-                appendLine("Note: RAG (Retrieval-Augmented Generation) is currently disabled. Answer questions using your general knowledge.")
+                content
             }
-            
-            if (mcpClient != null) {
-                appendLine("You also have access to mobile device control tools through MCP.")
-            }
-            
-            appendLine("Always respond in the same language as the user's question.")
+        } catch (e: Exception) {
+            println("[Team Assistant]: Error loading prompt: ${e.message}, using default")
+            getDefaultPrompt()
         }
         
-        return ChatMessage(role = "system", content = systemPrompt)
+        return ChatMessage(role = "system", content = promptContent)
+    }
+    
+    /**
+     * Default prompt if file is not found
+     */
+    private fun getDefaultPrompt(): String {
+        val stats = ragPipeline.getStats()
+        
+        return buildString {
+            appendLine("You are an intelligent team assistant that helps manage project tasks and answers questions about the project.")
+            appendLine()
+            appendLine("You have access to:")
+            appendLine("1. **RAG (Retrieval-Augmented Generation)**: Indexed project documentation")
+            if (stats.totalChunks > 0) {
+                appendLine("   - ${stats.totalChunks} indexed document chunks from ${stats.uniqueSources} source(s)")
+            } else {
+                appendLine("   - No documents currently indexed")
+            }
+            appendLine("2. **Task Management Tools (MCP)**: Tools to create, query, and manage team tasks")
+            appendLine()
+            appendLine("**Your Capabilities:**")
+            appendLine("- Answer questions about the project using RAG documentation")
+            appendLine("- Create, view, and manage tasks using task management tools")
+            appendLine("- Analyze project status and provide recommendations")
+            appendLine("- Suggest task priorities based on dependencies and urgency")
+            appendLine()
+            appendLine("**Important Rules:**")
+            appendLine("- Always use RAG for project-related questions")
+            appendLine("- Use task management tools for task operations")
+            appendLine("- Consider task dependencies when making recommendations")
+            appendLine("- Prioritize unblocking blocked tasks")
+            appendLine("- Respond in the same language as the user's question")
+        }
     }
     
     /**
@@ -380,14 +363,3 @@ class RAGAgentOrchestrator(
         baseOrchestrator.shutdown()
     }
 }
-
-/**
- * Result of comparing answers with and without reranker filter
- */
-data class ComparisonResult(
-    val query: String,
-    val answerWithoutFilter: String,
-    val answerWithFilter: String,
-    val rerankThreshold: Float,
-    val useReranker: Boolean
-)

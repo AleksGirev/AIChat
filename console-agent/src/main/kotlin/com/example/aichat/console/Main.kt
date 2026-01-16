@@ -2,6 +2,7 @@ package com.example.aichat.console
 
 import com.example.aichat.console.agent.AgentOrchestrator
 import com.example.aichat.console.agent.RAGAgentOrchestrator
+import com.example.aichat.console.agent.TeamAssistantOrchestrator
 import com.example.aichat.console.help.HelpService
 import com.example.aichat.console.llm.OpenAiClient
 import com.example.aichat.console.mcp.McpClientFactory
@@ -11,13 +12,20 @@ import kotlinx.coroutines.runBlocking
 
 fun main(args: Array<String>) {
     runBlocking {
-        // Check if RAG mode is enabled (default: true)
+        // Check modes
         val useRAG = !args.contains("--no-rag")
+        val useTeamAssistant = args.contains("--team-assistant")
         
-        if (true) {
-            println("=== RAG-Enhanced AI Agent ===")
-        } else {
-            println("=== Mobile Device Control Agent ===")
+        when {
+            useTeamAssistant -> {
+                println("=== Team Assistant (RAG + Tasks MCP) ===")
+            }
+            useRAG -> {
+                println("=== RAG-Enhanced AI Agent ===")
+            }
+            else -> {
+                println("=== Mobile Device Control Agent ===")
+            }
         }
         println()
         
@@ -54,9 +62,11 @@ fun main(args: Array<String>) {
         
             // Initialize
             var mcpProcess: Process? = null
+            var tasksMcpProcess: Process? = null
             var repoMcpProcess: Process? = null
             var orchestrator: AgentOrchestrator? = null
             var ragOrchestrator: RAGAgentOrchestrator? = null
+            var teamAssistantOrchestrator: TeamAssistantOrchestrator? = null
             var ragPipeline: RAGPipeline? = null
             var helpService: HelpService? = null
             var repoMcpClient: McpClientWrapper? = null
@@ -110,30 +120,63 @@ fun main(args: Array<String>) {
                 )
             }
             
-            // Create MCP client using official SDK
-            println("[Agent]: Connecting to mobile-mcp server...")
-            println("[Agent]: NOTE: Make sure a device is connected (Android/iOS) for mobile-mcp to work")
-            
-            val mcpClient: McpClientWrapper? = try {
-                val mcpResult = McpClientFactory.createMobileMcpClient()
-                if (mcpResult.isSuccess) {
-                    val pair = mcpResult.getOrThrow()
-                    mcpProcess = pair.second // Keep process reference for cleanup
-                    pair.first
-                } else {
-                    val error = mcpResult.exceptionOrNull()
-                    println("WARNING: Failed to start MCP server: ${error?.message}")
+            // Create MCP client based on mode
+            val mcpClient: McpClientWrapper? = if (useTeamAssistant) {
+                // Team Assistant mode: use Tasks MCP server
+                println("[Agent]: Connecting to tasks-mcp server...")
+                try {
+                    val tasksMcpResult = McpClientFactory.createTasksMcpClient()
+                    if (tasksMcpResult.isSuccess) {
+                        val pair = tasksMcpResult.getOrThrow()
+                        tasksMcpProcess = pair.second // Keep process reference for cleanup
+                        println("[Agent]: ✓ Tasks MCP server connected")
+                        pair.first
+                    } else {
+                        val error = tasksMcpResult.exceptionOrNull()
+                        println("WARNING: Failed to start Tasks MCP server: ${error?.message}")
+                        println("[Agent]: Continuing without Tasks MCP tools...")
+                        null
+                    }
+                } catch (e: Exception) {
+                    println("WARNING: Failed to start Tasks MCP server: ${e.message}")
+                    println("[Agent]: Continuing without Tasks MCP tools...")
+                    null
+                }
+            } else {
+                // Regular mode: use Mobile MCP server
+                println("[Agent]: Connecting to mobile-mcp server...")
+                println("[Agent]: NOTE: Make sure a device is connected (Android/iOS) for mobile-mcp to work")
+                try {
+                    val mcpResult = McpClientFactory.createMobileMcpClient()
+                    if (mcpResult.isSuccess) {
+                        val pair = mcpResult.getOrThrow()
+                        mcpProcess = pair.second // Keep process reference for cleanup
+                        pair.first
+                    } else {
+                        val error = mcpResult.exceptionOrNull()
+                        println("WARNING: Failed to start MCP server: ${error?.message}")
+                        println("[Agent]: Continuing without MCP tools...")
+                        null
+                    }
+                } catch (e: Exception) {
+                    println("WARNING: Failed to start MCP server: ${e.message}")
                     println("[Agent]: Continuing without MCP tools...")
                     null
                 }
-            } catch (e: Exception) {
-                println("WARNING: Failed to start MCP server: ${e.message}")
-                println("[Agent]: Continuing without MCP tools...")
-                null
             }
             
             // Create appropriate orchestrator
-            if (useRAG && ragPipeline != null) {
+            if (useTeamAssistant && useRAG && ragPipeline != null) {
+                // Team Assistant mode: RAG + Tasks MCP
+                teamAssistantOrchestrator = TeamAssistantOrchestrator(llmClient, ragPipeline, mcpClient)
+                val initResult = teamAssistantOrchestrator.initialize()
+                if (initResult.isFailure) {
+                    val error = initResult.exceptionOrNull()
+                    println("ERROR: Failed to initialize Team Assistant orchestrator: ${error?.message}")
+                    return@runBlocking
+                }
+            } else if (useRAG && ragPipeline != null) {
+                // RAG mode: RAG + Mobile MCP (or no MCP)
                 ragOrchestrator = RAGAgentOrchestrator(llmClient, ragPipeline, mcpClient)
                 val initResult = ragOrchestrator.initialize()
                 if (initResult.isFailure) {
@@ -142,6 +185,7 @@ fun main(args: Array<String>) {
                     return@runBlocking
                 }
             } else {
+                // Regular mode: Mobile MCP only (or no MCP)
                 orchestrator = AgentOrchestrator(llmClient, mcpClient)
                 val orchestratorInit = orchestrator.initialize()
                 if (orchestratorInit.isFailure) {
@@ -159,18 +203,35 @@ fun main(args: Array<String>) {
             }
             
             println("[Agent]: Готов к работе!")
-            if (useRAG && ragOrchestrator != null) {
-                println("[RAG]: RAG mode enabled - questions will be answered using indexed documents")
-                println("[RAG]: Use '/rag off' to disable RAG, '/rag on' to enable it")
+            when {
+                useTeamAssistant && teamAssistantOrchestrator != null -> {
+                    println("[Team Assistant]: Team Assistant mode enabled")
+                    println("[Team Assistant]: - RAG: answers questions about the project")
+                    println("[Team Assistant]: - Tasks MCP: manages team tasks")
+                    println("[Team Assistant]: - Use '/rag off' to disable RAG, '/rag on' to enable it")
+                }
+                useRAG && ragOrchestrator != null -> {
+                    println("[RAG]: RAG mode enabled - questions will be answered using indexed documents")
+                    println("[RAG]: Use '/rag off' to disable RAG, '/rag on' to enable it")
+                }
             }
             println()
             
             // Interactive loop
+            // Use System.console() for better interactive input handling
+            val console = System.console()
             var running = true
             while (running) {
                 try {
-                    print("> ")
-                    val input = readLine()?.trim()
+                    val input = if (console != null) {
+                        // Use console for better terminal interaction
+                        console.readLine("> ")?.trim()
+                    } else {
+                        // Fallback to System.in if console is not available
+                        print("> ")
+                        System.out.flush() // Ensure prompt is displayed immediately
+                        readLine()?.trim()
+                    }
                     
                     when {
                         input.isNullOrBlank() -> continue
@@ -207,35 +268,61 @@ fun main(args: Array<String>) {
                         }
                         input.startsWith("/rag", ignoreCase = true) -> {
                             // Handle RAG commands
-                            if (ragOrchestrator == null) {
+                            val ragOrch = teamAssistantOrchestrator ?: ragOrchestrator
+                            if (ragOrch == null) {
                                 println("[RAG]: RAG is not available (started without RAG mode)")
                             } else {
                                 val parts = input.split("\\s+".toRegex())
                                 when {
                                     input.equals("/rag on", ignoreCase = true) || 
                                     input.equals("/rag enable", ignoreCase = true) -> {
-                                        ragOrchestrator.enableRAG()
+                                        if (teamAssistantOrchestrator != null) {
+                                            teamAssistantOrchestrator.ragEnabled = true
+                                            println("[RAG]: ✓ RAG enabled")
+                                        } else {
+                                            ragOrchestrator?.enableRAG()
+                                        }
                                     }
                                     input.equals("/rag off", ignoreCase = true) || 
                                     input.equals("/rag disable", ignoreCase = true) -> {
-                                        ragOrchestrator.disableRAG()
+                                        if (teamAssistantOrchestrator != null) {
+                                            teamAssistantOrchestrator.ragEnabled = false
+                                            println("[RAG]: ✗ RAG disabled")
+                                        } else {
+                                            ragOrchestrator?.disableRAG()
+                                        }
                                     }
                                     input.equals("/rag status", ignoreCase = true) || 
                                     input.equals("/rag", ignoreCase = true) -> {
-                                        val status = if (ragOrchestrator.isRAGEnabled()) "enabled" else "disabled"
+                                        val status = if (teamAssistantOrchestrator != null) {
+                                            if (teamAssistantOrchestrator.ragEnabled) "enabled" else "disabled"
+                                        } else {
+                                            if (ragOrchestrator?.isRAGEnabled() == true) "enabled" else "disabled"
+                                        }
                                         println("[RAG]: Status: $status")
                                         val stats = ragPipeline?.getStats()
                                         if (stats != null) {
                                             println("[RAG]: Index contains ${stats.totalChunks} chunks from ${stats.uniqueSources} source(s)")
                                         }
-                                        println("[RAG]: Similarity threshold: ${String.format("%.2f", ragOrchestrator.minSimilarity)}")
-                                        println("[RAG]: Reranker threshold: ${String.format("%.2f", ragOrchestrator.rerankThresholdValue)}")
-                                        println("[RAG]: Reranker enabled: ${ragOrchestrator.useReranker}")
+                                        if (teamAssistantOrchestrator != null) {
+                                            println("[RAG]: Similarity threshold: ${String.format("%.2f", teamAssistantOrchestrator.minSimilarity)}")
+                                            println("[RAG]: Reranker threshold: ${String.format("%.2f", teamAssistantOrchestrator.rerankThresholdValue)}")
+                                            println("[RAG]: Reranker enabled: ${teamAssistantOrchestrator.useReranker}")
+                                        } else if (ragOrchestrator != null) {
+                                            println("[RAG]: Similarity threshold: ${String.format("%.2f", ragOrchestrator.minSimilarity)}")
+                                            println("[RAG]: Reranker threshold: ${String.format("%.2f", ragOrchestrator.rerankThresholdValue)}")
+                                            println("[RAG]: Reranker enabled: ${ragOrchestrator.useReranker}")
+                                        }
                                     }
                                     parts.size == 3 && parts[1].equals("threshold", ignoreCase = true) -> {
                                         try {
                                             val threshold = parts[2].toFloat()
-                                            ragOrchestrator.setSimilarityThreshold(threshold)
+                                            if (teamAssistantOrchestrator != null) {
+                                                teamAssistantOrchestrator.minSimilarity = threshold
+                                                println("[RAG]: Similarity threshold set to ${String.format("%.2f", threshold)}")
+                                            } else {
+                                                ragOrchestrator?.setSimilarityThreshold(threshold)
+                                            }
                                         } catch (e: Exception) {
                                             println("[RAG]: Invalid threshold value. Use a number between 0.0 and 1.0")
                                         }
@@ -243,7 +330,12 @@ fun main(args: Array<String>) {
                                     parts.size == 3 && parts[1].equals("rerank-threshold", ignoreCase = true) -> {
                                         try {
                                             val threshold = parts[2].toFloat()
-                                            ragOrchestrator.setRerankThreshold(threshold)
+                                            if (teamAssistantOrchestrator != null) {
+                                                teamAssistantOrchestrator.rerankThresholdValue = threshold
+                                                println("[RAG]: Reranker threshold set to ${String.format("%.2f", threshold)}")
+                                            } else {
+                                                ragOrchestrator?.setRerankThreshold(threshold)
+                                            }
                                         } catch (e: Exception) {
                                             println("[RAG]: Invalid rerank threshold value. Use a number between 0.0 and 1.0")
                                         }
@@ -252,11 +344,21 @@ fun main(args: Array<String>) {
                                         when {
                                             parts[2].equals("on", ignoreCase = true) || 
                                             parts[2].equals("enable", ignoreCase = true) -> {
-                                                ragOrchestrator.setRerankerEnabled(true)
+                                                if (teamAssistantOrchestrator != null) {
+                                                    teamAssistantOrchestrator.useReranker = true
+                                                    println("[RAG]: Reranker enabled")
+                                                } else {
+                                                    ragOrchestrator?.setRerankerEnabled(true)
+                                                }
                                             }
                                             parts[2].equals("off", ignoreCase = true) || 
                                             parts[2].equals("disable", ignoreCase = true) -> {
-                                                ragOrchestrator.setRerankerEnabled(false)
+                                                if (teamAssistantOrchestrator != null) {
+                                                    teamAssistantOrchestrator.useReranker = false
+                                                    println("[RAG]: Reranker disabled")
+                                                } else {
+                                                    ragOrchestrator?.setRerankerEnabled(false)
+                                                }
                                             }
                                             else -> {
                                                 println("[RAG]: Unknown reranker command. Use:")
@@ -266,34 +368,8 @@ fun main(args: Array<String>) {
                                         }
                                     }
                                     input.startsWith("/rag compare", ignoreCase = true) -> {
-                                        val query = input.removePrefix("/rag compare").trim()
-                                        if (query.isBlank()) {
-                                            println("[RAG]: Please provide a query to compare. Usage:")
-                                            println("  /rag compare <your question>")
-                                        } else {
-                                            println("[RAG]: Comparing answers with and without reranker filter...")
-                                            println("[RAG]: Query: $query")
-                                            println()
-                                            
-                                            val comparisonResult = ragOrchestrator.compareAnswersWithFilter(query)
-                                            if (comparisonResult.isSuccess) {
-                                                val result = comparisonResult.getOrThrow()
-                                                println("=".repeat(80))
-                                                println("ANSWER WITHOUT RERANKER FILTER:")
-                                                println("=".repeat(80))
-                                                println(result.answerWithoutFilter)
-                                                println()
-                                                println("=".repeat(80))
-                                                println("ANSWER WITH RERANKER FILTER (threshold: ${String.format("%.2f", result.rerankThreshold)}):")
-                                                println("=".repeat(80))
-                                                println(result.answerWithFilter)
-                                                println()
-                                                println("[RAG]: Comparison complete. Review both answers to evaluate quality.")
-                                            } else {
-                                                val error = comparisonResult.exceptionOrNull()
-                                                println("[RAG]: Failed to compare answers: ${error?.message}")
-                                            }
-                                        }
+                                        println("[RAG]: Compare command is not available in Team Assistant mode")
+                                        println("[RAG]: Use regular queries to test RAG functionality")
                                     }
                                     else -> {
                                         println("[RAG]: Unknown command. Available commands:")
@@ -309,10 +385,16 @@ fun main(args: Array<String>) {
                         }
                         else -> {
                             // Process command
-                            val result = if (useRAG && ragOrchestrator != null) {
-                                ragOrchestrator.processCommand(input)
-                            } else {
-                                orchestrator?.processCommand(input) ?: Result.failure(Exception("Orchestrator not available"))
+                            val result = when {
+                                useTeamAssistant && teamAssistantOrchestrator != null -> {
+                                    teamAssistantOrchestrator.processCommand(input)
+                                }
+                                useRAG && ragOrchestrator != null -> {
+                                    ragOrchestrator.processCommand(input)
+                                }
+                                else -> {
+                                    orchestrator?.processCommand(input) ?: Result.failure(Exception("Orchestrator not available"))
+                                }
                             }
                             
                             if (result.isSuccess) {
@@ -320,14 +402,21 @@ fun main(args: Array<String>) {
                                 println("[Agent]: $response")
                                 
                                 // Display sources if RAG was used
-                                if (useRAG && ragOrchestrator != null && ragOrchestrator.isRAGEnabled()) {
-                                    val sources = ragOrchestrator.getLastUsedSources()
-                                    if (sources.isNotEmpty()) {
-                                        println()
-                                        println("Источники:")
-                                        sources.forEachIndexed { index, source ->
-                                            println("  ${index + 1}. $source")
-                                        }
+                                val sources = when {
+                                    useTeamAssistant && teamAssistantOrchestrator != null && teamAssistantOrchestrator.ragEnabled -> {
+                                        teamAssistantOrchestrator.getLastUsedSources()
+                                    }
+                                    useRAG && ragOrchestrator != null && ragOrchestrator.isRAGEnabled() -> {
+                                        ragOrchestrator.getLastUsedSources()
+                                    }
+                                    else -> emptyList()
+                                }
+                                
+                                if (sources.isNotEmpty()) {
+                                    println()
+                                    println("Источники:")
+                                    sources.forEachIndexed { index, source ->
+                                        println("  ${index + 1}. $source")
                                     }
                                 }
                             } else {
@@ -346,10 +435,12 @@ fun main(args: Array<String>) {
         } finally {
             // Cleanup
             try {
+                teamAssistantOrchestrator?.shutdown()
                 ragOrchestrator?.shutdown()
                 orchestrator?.shutdown()
                 ragPipeline?.close()
-                mcpProcess?.destroyForcibly() // Clean up MCP server process
+                mcpProcess?.destroyForcibly() // Clean up Mobile MCP server process
+                tasksMcpProcess?.destroyForcibly() // Clean up Tasks MCP server process
                 repoMcpProcess?.destroyForcibly() // Clean up repo MCP server process
                 repoMcpClient?.disconnect()
             } catch (e: Exception) {

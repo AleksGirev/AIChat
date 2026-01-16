@@ -43,6 +43,7 @@ application {
 
 tasks.named<JavaExec>("run") {
     standardInput = System.`in`
+    standardOutput = System.out
 }
 
 // Task for running the Repo MCP Server
