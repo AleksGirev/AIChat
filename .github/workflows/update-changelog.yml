@@ -1,0 +1,54 @@
+name: Generate and Send Changelog Entry
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  generate-changelog:
+    name: Generate Changelog Entry
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Fetch last 2 commits to compare
+    
+      - name: Generate changelog entry
+        id: changelog
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'yandexgpt' }}
+          LLM_FOLDER_ID: ${{ secrets.LLM_FOLDER_ID }}
+          KB_API_URL: ${{ secrets.KB_API_URL || 'https://httpbin.org/post' }}
+          KB_API_KEY: ${{ secrets.KB_API_KEY }}
+          COMMIT_MESSAGE_PATTERN: ${{ vars.COMMIT_MESSAGE_PATTERN || '\[([A-Z]+-[0-9]+)\]' }}
+        run: |
+          COMMIT_HASH="${{ github.sha }}"
+          # Get commit message from git (more reliable than github.event)
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B "$COMMIT_HASH")
+          
+          bash scripts/generate-changelog-entry.sh \
+            --commit-hash "$COMMIT_HASH" \
+            --commit-message "$COMMIT_MESSAGE" \
+            --llm-api-key "${LLM_API_KEY}" \
+            --llm-provider "${LLM_PROVIDER}" \
+            --llm-folder-id "${LLM_FOLDER_ID}" \
+            --kb-url "${KB_API_URL}" \
+            --kb-key "${KB_API_KEY}" \
+            --pattern "${COMMIT_MESSAGE_PATTERN}"
+    
+      - name: Display generated changelog
+        if: always()
+        run: |
+          echo "Changelog generation completed"
+          if [ -f changelog-entry.json ]; then
+            echo "Generated entry:"
+            cat changelog-entry.json
+          fi
