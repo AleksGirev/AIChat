@@ -20,6 +20,9 @@ dependencies {
     // HTTP client
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     
+    // Jackson for JSON serialization (used by Ollama CLI)
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.1")
+    
     // Official Kotlin MCP SDK
     implementation("io.modelcontextprotocol:kotlin-sdk-client-jvm:0.8.0")
     
@@ -112,6 +115,16 @@ tasks.register<JavaExec>("runPrReview") {
     args = project.findProperty("prreview.args")?.toString()?.let { argString ->
         parseCommandLineArgs(argString)
     } ?: emptyList()
+}
+
+// Task for running Offline AI Chat CLI
+tasks.register<JavaExec>("runOfflineChat") {
+    group = "application"
+    description = "Run Offline AI Chat CLI (Ollama)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.aichat.console.offlinechat.OfflineChatMainKt")
+    standardInput = System.`in`
+    standardOutput = System.out
 }
 
 // Helper function to parse command line arguments with quotes
