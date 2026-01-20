@@ -2,6 +2,7 @@ package com.example.aichat.data.repository
 
 import android.util.Log
 import com.example.aichat.data.Config
+import com.example.aichat.data.api.LocalLLMApiService
 import com.example.aichat.data.api.OpenAiApiService
 import com.example.aichat.data.api.YandexApiService
 import com.example.aichat.data.mcp.McpRepository
@@ -31,6 +32,7 @@ class ChatRepository(
     private val apiService: OpenAiApiService,
     private val apiKey: String,
     private val yandexApiService: YandexApiService? = null,
+    private val localLLMApiService: LocalLLMApiService? = null, // Optional local LLM service
     private val mcpRepository: McpRepository? = null, // Optional MCP repository
     private val gson: Gson
 ) {
@@ -80,24 +82,47 @@ class ChatRepository(
             )
             
             // Route to appropriate API based on model name
-            val response = if (model.lowercase().contains("yandex") || model.startsWith("gpt://")) {
-                // YandexGPT API
-                if (yandexApiService == null) {
-                    return@withContext Result.failure(Exception("YandexGPT API service not configured"))
+            val response = when {
+                // Local LLM (check if model name starts with "local:" or if local LLM service is available)
+                model.lowercase().startsWith("local:") || 
+                (localLLMApiService != null && model.lowercase().contains("local")) -> {
+                    // Local LLM API
+                    if (localLLMApiService == null) {
+                        return@withContext Result.failure(Exception("Local LLM API service not configured"))
+                    }
+                    // Remove "local:" prefix if present, or use model name as-is
+                    val actualModel = if (model.startsWith("local:")) {
+                        model.substringAfter("local:")
+                    } else {
+                        model
+                    }
+                    val requestWithModel = request.copy(model = actualModel)
+                    val authorization = Config.LOCAL_LLM_API_KEY?.let { "Bearer $it" }
+                    localLLMApiService.sendChatRequest(
+                        authorization = authorization,
+                        request = requestWithModel
+                    )
                 }
-                val authorization = "Bearer ${Config.YANDEX_IAM_TOKEN}"
-                yandexApiService.sendChatRequest(
-                    authorization = authorization,
-                    folderId = Config.YANDEX_FOLDER_ID,
-                    request = request
-                )
-            } else {
+                // YandexGPT API
+                model.lowercase().contains("yandex") || model.startsWith("gpt://") -> {
+                    if (yandexApiService == null) {
+                        return@withContext Result.failure(Exception("YandexGPT API service not configured"))
+                    }
+                    val authorization = "Bearer ${Config.YANDEX_IAM_TOKEN}"
+                    yandexApiService.sendChatRequest(
+                        authorization = authorization,
+                        folderId = Config.YANDEX_FOLDER_ID,
+                        request = request
+                    )
+                }
                 // OpenRouter API (for amazon/nova-2-lite-v1:free and others)
-                val authorization = "Bearer $apiKey"
-                apiService.sendChatRequest(
-                    authorization = authorization,
-                    request = request
-                )
+                else -> {
+                    val authorization = "Bearer $apiKey"
+                    apiService.sendChatRequest(
+                        authorization = authorization,
+                        request = request
+                    )
+                }
             }
             
             if (response.isSuccessful && response.body() != null) {
@@ -255,24 +280,45 @@ class ChatRepository(
                         )
                         
                         // Route to appropriate API based on model name
-                        val apiResponse = if (modelName.lowercase().contains("yandex") || modelName == "yandexgpt") {
-                            // YandexGPT API
-                            if (yandexApiService == null) {
-                                throw Exception("YandexGPT API service not configured")
+                        val apiResponse = when {
+                            // Local LLM
+                            modelName.lowercase().startsWith("local:") || 
+                            (localLLMApiService != null && modelName.lowercase().contains("local")) -> {
+                                if (localLLMApiService == null) {
+                                    throw Exception("Local LLM API service not configured")
+                                }
+                                val actualModel = if (modelName.startsWith("local:")) {
+                                    modelName.substringAfter("local:")
+                                } else {
+                                    modelName
+                                }
+                                val requestWithModel = request.copy(model = actualModel)
+                                val authorization = Config.LOCAL_LLM_API_KEY?.let { "Bearer $it" }
+                                localLLMApiService.sendChatRequest(
+                                    authorization = authorization,
+                                    request = requestWithModel
+                                )
                             }
-                            val authorization = "Bearer ${Config.YANDEX_IAM_TOKEN}"
-                            yandexApiService.sendChatRequest(
-                                authorization = authorization,
-                                folderId = Config.YANDEX_FOLDER_ID,
-                                request = request
-                            )
-                        } else {
+                            // YandexGPT API
+                            modelName.lowercase().contains("yandex") || modelName == "yandexgpt" -> {
+                                if (yandexApiService == null) {
+                                    throw Exception("YandexGPT API service not configured")
+                                }
+                                val authorization = "Bearer ${Config.YANDEX_IAM_TOKEN}"
+                                yandexApiService.sendChatRequest(
+                                    authorization = authorization,
+                                    folderId = Config.YANDEX_FOLDER_ID,
+                                    request = request
+                                )
+                            }
                             // OpenRouter API (for amazon/nova-2-lite-v1:free)
-                            val authorization = "Bearer $apiKey"
-                            apiService.sendChatRequest(
-                                authorization = authorization,
-                                request = request
-                            )
+                            else -> {
+                                val authorization = "Bearer $apiKey"
+                                apiService.sendChatRequest(
+                                    authorization = authorization,
+                                    request = request
+                                )
+                            }
                         }
                         
                         if (apiResponse.isSuccessful && apiResponse.body() != null) {

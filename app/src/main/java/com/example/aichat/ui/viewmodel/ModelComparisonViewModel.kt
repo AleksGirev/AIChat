@@ -25,23 +25,41 @@ class ModelComparisonViewModel : ViewModel() {
         apiService = networkDeps.apiService,
         apiKey = Config.OPENAI_API_KEY,
         yandexApiService = networkDeps.yandexApiService,
+        localLLMApiService = networkDeps.localLLMApiService,
         gson = networkDeps.gson
     )
     
-    // Fixed models for comparison: amazon/nova-2-lite-v1:free and YandexGPT
+    // Models for comparison
+    // Remote models are controlled by Config.ENABLE_REMOTE_MODELS feature toggle
+    // When remote models are disabled, only local models are available
     private val _selectedModels = MutableStateFlow<List<ModelInfo>>(
-        listOf(
-            ModelInfo(
-                id = "amazon/nova-2-lite-v1:free",
-                name = "Amazon Nova 2 Lite",
-                provider = "amazon"
-            ),
-            ModelInfo(
-                id = "gpt://${Config.YANDEX_FOLDER_ID}/yandexgpt/latest",
-                name = "Yandex GPT",
-                provider = "yandex"
-            )
-        )
+        buildList {
+            if (Config.ENABLE_REMOTE_MODELS) {
+                // Cloud models (only included if ENABLE_REMOTE_MODELS is true)
+                add(ModelInfo(
+                    id = "amazon/nova-2-lite-v1:free",
+                    name = "Amazon Nova 2 Lite",
+                    provider = "amazon"
+                ))
+                add(ModelInfo(
+                    id = "gpt://${Config.YANDEX_FOLDER_ID}/yandexgpt/latest",
+                    name = "Yandex GPT",
+                    provider = "yandex"
+                ))
+            } else {
+                // Local models only (when remote models are disabled)
+                add(ModelInfo(
+                    id = "local:qwen2:7b",
+                    name = "Local: Qwen2 7B",
+                    provider = "local"
+                ))
+                add(ModelInfo(
+                    id = "local:llama2",
+                    name = "Local: Llama 2",
+                    provider = "local"
+                ))
+            }
+        }
     )
     val selectedModels: StateFlow<List<ModelInfo>> = _selectedModels.asStateFlow()
     

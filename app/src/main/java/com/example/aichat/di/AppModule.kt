@@ -2,6 +2,7 @@ package com.example.aichat.di
 
 import android.app.Application
 import com.example.aichat.data.Config
+import com.example.aichat.data.api.LocalLLMApiService
 import com.example.aichat.data.auth.AuthManager
 import com.example.aichat.data.crm.CrmMcpClient
 import com.example.aichat.data.local.ChatDatabase
@@ -82,6 +83,17 @@ val appModule = module {
         val gson: Gson = get()
         val retrofit = NetworkModule.provideYandexRetrofit(okHttpClient, gson)
         NetworkModule.provideYandexApiService(retrofit)
+    }
+    
+    /**
+     * Local LLM API service
+     * Singleton: Retrofit service interface for local LLM servers (Ollama, LM Studio, etc.)
+     */
+    single { 
+        val okHttpClient: OkHttpClient = get()
+        val gson: Gson = get()
+        val retrofit = NetworkModule.provideLocalLLMRetrofit(okHttpClient, gson)
+        NetworkModule.provideLocalLLMApiService(retrofit)
     }
     
     // ==================== Database Dependencies ====================
@@ -255,6 +267,7 @@ val appModule = module {
             apiService = get(),
             apiKey = Config.OPENAI_API_KEY,
             yandexApiService = get(),
+            localLLMApiService = get(),
             mcpRepository = get(),
             gson = get()
         )

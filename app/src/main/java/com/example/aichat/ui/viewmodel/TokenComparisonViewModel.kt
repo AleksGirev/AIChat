@@ -25,16 +25,34 @@ class TokenComparisonViewModel : ViewModel() {
         apiService = networkDeps.apiService,
         apiKey = Config.OPENAI_API_KEY,
         yandexApiService = networkDeps.yandexApiService,
+        localLLMApiService = networkDeps.localLLMApiService,
         gson = networkDeps.gson
     )
     
     // Available models
-    val availableModels = listOf(
-        "amazon/nova-2-lite-v1:free" to "Amazon Nova 2 Lite",
-        "gpt://${Config.YANDEX_FOLDER_ID}/yandexgpt/latest" to "YandexGPT"
-    )
+    // Remote models are controlled by Config.ENABLE_REMOTE_MODELS feature toggle
+    val availableModels = buildList {
+        // Cloud models (only included if ENABLE_REMOTE_MODELS is true)
+        if (Config.ENABLE_REMOTE_MODELS) {
+            add("amazon/nova-2-lite-v1:free" to "Amazon Nova 2 Lite")
+            add("gpt://${Config.YANDEX_FOLDER_ID}/yandexgpt/latest" to "YandexGPT")
+        }
+        // Local LLM models (always available)
+        add("local:qwen2:7b" to "Local: Qwen2 7B")
+        add("local:llama2" to "Local: Llama 2")
+        add("local:llama3" to "Local: Llama 3")
+        add("local:mistral" to "Local: Mistral")
+        add("local:mixtral" to "Local: Mixtral")
+        add("local:phi" to "Local: Phi")
+        add("local:gemma" to "Local: Gemma")
+        add("local:qwen" to "Local: Qwen")
+        add("local:codellama" to "Local: CodeLlama")
+    }
     
-    private val _modelName = MutableStateFlow(Config.DEFAULT_YANDEXGPT_MODEL)
+    // Default to first available model (will be local if remote models are disabled)
+    private val _modelName = MutableStateFlow(
+        if (Config.ENABLE_REMOTE_MODELS) Config.DEFAULT_YANDEXGPT_MODEL else "local:qwen2:7b"
+    )
     val modelName: StateFlow<String> = _modelName.asStateFlow()
     
     /**

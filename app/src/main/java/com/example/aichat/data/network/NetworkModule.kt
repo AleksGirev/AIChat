@@ -1,6 +1,7 @@
 package com.example.aichat.data.network
 
 import com.example.aichat.data.Config
+import com.example.aichat.data.api.LocalLLMApiService
 import com.example.aichat.data.api.OpenAiApiService
 import com.example.aichat.data.api.YandexApiService
 import com.google.gson.Gson
@@ -21,6 +22,9 @@ object NetworkModule {
     
     // YandexGPT API base URL
     private const val YANDEX_BASE_URL = Config.YANDEX_API_BASE_URL
+    
+    // Local LLM API base URL
+    private const val LOCAL_LLM_BASE_URL = Config.LOCAL_LLM_BASE_URL
     
     /**
      * Creates and provides Gson instance for JSON serialization/deserialization
@@ -90,6 +94,27 @@ object NetworkModule {
     }
     
     /**
+     * Creates and provides Retrofit instance for Local LLM API
+     */
+    fun provideLocalLLMRetrofit(
+        okHttpClient: OkHttpClient,
+        gson: Gson
+    ): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(LOCAL_LLM_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+    }
+    
+    /**
+     * Creates and provides LocalLLMApiService instance
+     */
+    fun provideLocalLLMApiService(retrofit: Retrofit): LocalLLMApiService {
+        return retrofit.create(LocalLLMApiService::class.java)
+    }
+    
+    /**
      * Convenience method to create all network dependencies
      * Returns a NetworkDependencies object containing all required instances
      */
@@ -102,12 +127,16 @@ object NetworkModule {
         val yandexRetrofit = provideYandexRetrofit(okHttpClient, gson)
         val yandexApiService = provideYandexApiService(yandexRetrofit)
         
+        val localLLMRetrofit = provideLocalLLMRetrofit(okHttpClient, gson)
+        val localLLMApiService = provideLocalLLMApiService(localLLMRetrofit)
+        
         return NetworkDependencies(
             gson = gson,
             okHttpClient = okHttpClient,
             retrofit = retrofit,
             apiService = apiService,
-            yandexApiService = yandexApiService
+            yandexApiService = yandexApiService,
+            localLLMApiService = localLLMApiService
         )
     }
 }
@@ -120,6 +149,7 @@ data class NetworkDependencies(
     val okHttpClient: OkHttpClient,
     val retrofit: Retrofit,
     val apiService: OpenAiApiService,
-    val yandexApiService: YandexApiService
+    val yandexApiService: YandexApiService,
+    val localLLMApiService: LocalLLMApiService
 )
 
