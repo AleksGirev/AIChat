@@ -29,7 +29,7 @@ class LlmClientOkHttp(
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(300, TimeUnit.SECONDS)  // 5 minutes for remote server (generation can take time)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
     

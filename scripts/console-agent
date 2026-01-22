@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# Console Agent - Quick launcher for AI Chat console applications
+# Usage: console-agent [command] [options]
+#
+# Commands:
+#   remote    - Run Remote AI Chat (default)
+#   offline   - Run Offline AI Chat
+#   help      - Show this help message
+
+# Get the directory where this script is located (handle symlinks)
+# This works on both macOS and Linux
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+
+# Use Python to resolve symlinks (works on all platforms)
+if command -v python3 > /dev/null 2>&1; then
+    REAL_SCRIPT="$(python3 -c "import os; print(os.path.realpath('$SCRIPT_SOURCE'))")"
+elif command -v python > /dev/null 2>&1; then
+    REAL_SCRIPT="$(python -c "import os; print(os.path.realpath('$SCRIPT_SOURCE'))")"
+else
+    # Fallback: try to resolve manually
+    REAL_SCRIPT="$SCRIPT_SOURCE"
+    if [ -L "$REAL_SCRIPT" ]; then
+        # Get the directory of the symlink
+        SYMLINK_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
+        TARGET="$(readlink "$REAL_SCRIPT")"
+        if [[ "$TARGET" != /* ]]; then
+            REAL_SCRIPT="$SYMLINK_DIR/$TARGET"
+        else
+            REAL_SCRIPT="$TARGET"
+        fi
+    fi
+    # Get absolute path
+    REAL_SCRIPT="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)/$(basename "$REAL_SCRIPT")"
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Change to project root
+cd "$PROJECT_ROOT" || {
+    echo "❌ Error: Cannot change to project root directory"
+    echo "   Expected: $PROJECT_ROOT"
+    echo "   Current: $(pwd)"
+    exit 1
+}
+
+# Verify gradlew exists
+if [ ! -f "$PROJECT_ROOT/gradlew" ]; then
+    echo "❌ Error: gradlew not found in project root"
+    echo "   Project root: $PROJECT_ROOT"
+    echo "   Current directory: $(pwd)"
+    exit 1
+fi
+
+# Parse command
+COMMAND="${1:-remote}"
+
+case "$COMMAND" in
+    remote|r)
+        shift
+        # Run Gradle task with plain console output
+        # This will show the actual program output
+        exec ./gradlew :console-agent:runRemoteChat "$@" --console=plain
+        ;;
+    
+    offline|o)
+        shift
+        # Run Gradle task with plain console output
+        exec ./gradlew :console-agent:runOfflineChat "$@" --console=plain
+        ;;
+    
+    help|h|--help|-h)
+        cat <<EOF
+Console Agent - AI Chat CLI Launcher
+
+Usage: console-agent [command] [options]
+
+Commands:
+  remote, r     Run Remote AI Chat (connects to remote Ollama server)
+  offline, o    Run Offline AI Chat (connects to local Ollama)
+  help, h       Show this help message
+
+Examples:
+  console-agent                    # Run remote chat (default)
+  console-agent remote             # Run remote chat explicitly
+  console-agent offline            # Run offline chat
+  
+Environment Variables:
+  OLLAMA_BASE_URL    Remote Ollama server URL (default: http://193.42.127.171:11434)
+  OLLAMA_MODEL       Model name to use (default: qwen2:7b-instruct)
+
+For more information, see:
+  - console-agent/REMOTE_CHAT_README.md
+  - console-agent/OFFLINE_CHAT_README.md
+EOF
+        exit 0
+        ;;
+    
+    *)
+        echo "Unknown command: $COMMAND"
+        echo "Run 'console-agent help' for usage information"
+        exit 1
+        ;;
+esac

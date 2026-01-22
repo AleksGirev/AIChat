@@ -127,6 +127,44 @@ tasks.register<JavaExec>("runOfflineChat") {
     standardOutput = System.out
 }
 
+// Task for running Remote AI Chat CLI
+tasks.register<JavaExec>("runRemoteChat") {
+    group = "application"
+    description = "Run Remote AI Chat CLI (Ollama on remote server)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.aichat.console.remotechat.RemoteChatMainKt")
+    standardInput = System.`in`
+    standardOutput = System.out
+    
+    // Keep output clean but show errors
+    // Don't suppress output completely to see what's happening
+    
+    // Pass environment variables to the process (if not set, use defaults)
+    val ollamaUrl = System.getenv("OLLAMA_BASE_URL") ?: "http://193.42.127.171:11434"
+    val ollamaModel = System.getenv("OLLAMA_MODEL") ?: "qwen2:7b-instruct"
+    
+    environment("OLLAMA_BASE_URL", ollamaUrl)
+    environment("OLLAMA_MODEL", ollamaModel)
+    
+    // Parse arguments from command line if provided
+    args = project.findProperty("remotechat.args")?.toString()?.let { argString ->
+        parseCommandLineArgs(argString)
+    } ?: emptyList()
+}
+
+// Task for running Ollama diagnostics
+tasks.register<JavaExec>("runOllamaDiagnostics") {
+    group = "application"
+    description = "Run Ollama server diagnostics"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.aichat.console.ollama.OllamaDiagnosticsKt")
+    
+    // Parse arguments: baseUrl [model]
+    args = project.findProperty("ollama.diagnostics.args")?.toString()?.let { argString ->
+        parseCommandLineArgs(argString)
+    } ?: listOf("http://193.42.127.171:11434", "qwen2:7b-instruct")
+}
+
 // Helper function to parse command line arguments with quotes
 fun parseCommandLineArgs(argString: String): List<String> {
     val args = mutableListOf<String>()

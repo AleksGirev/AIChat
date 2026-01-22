@@ -1,0 +1,30 @@
+# Команды для выполнения на сервере (копируйте и вставляйте по одной)
+
+# 1. Создать директорию
+sudo mkdir -p /etc/systemd/system/ollama.service.d/
+
+# 2. Создать файл конфигурации
+sudo tee /etc/systemd/system/ollama.service.d/override.conf > /dev/null <<'EOFCONF'
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+EOFCONF
+
+# 3. Перезагрузить конфигурацию
+sudo systemctl daemon-reload
+
+# 4. Включить и запустить
+sudo systemctl enable ollama
+sudo systemctl start ollama
+
+# 5. Подождать
+sleep 3
+
+# 6. Проверить статус
+sudo systemctl status ollama
+
+# 7. Проверить порт
+sudo lsof -i :11434
+
+# 8. Проверить API
+curl http://localhost:11434/api/version
+curl http://localhost:11434/api/tags
