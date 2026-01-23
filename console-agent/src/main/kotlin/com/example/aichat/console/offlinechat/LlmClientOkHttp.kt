@@ -43,7 +43,12 @@ class LlmClientOkHttp(
     data class GenerateRequest(
         val model: String,
         val prompt: String,
-        @JsonProperty("stream") val stream: Boolean = false
+        @JsonProperty("stream") val stream: Boolean = false,
+        @JsonProperty("system") val system: String? = null,
+        val temperature: Double? = null,
+        @JsonProperty("num_predict") val numPredict: Int? = null, // max_tokens in Ollama
+        @JsonProperty("top_p") val topP: Double? = null,
+        @JsonProperty("top_k") val topK: Int? = null
     )
 
     /**
@@ -61,15 +66,29 @@ class LlmClientOkHttp(
      * Sends a prompt to the LLM and returns the response.
      * 
      * @param prompt The user's input prompt
+     * @param system System prompt (optional)
+     * @param temperature Temperature for generation (0.0-1.0, default: 0.8)
+     * @param maxTokens Maximum tokens to generate (default: unlimited)
+     * @param topP Top-p sampling parameter (default: 0.9)
      * @return The AI's response text
      * @throws Exception if the API call fails
      */
-    suspend fun generate(prompt: String): String = withContext(Dispatchers.IO) {
+    suspend fun generate(
+        prompt: String,
+        system: String? = null,
+        temperature: Double? = null,
+        maxTokens: Int? = null,
+        topP: Double? = null
+    ): String = withContext(Dispatchers.IO) {
         try {
             val request = GenerateRequest(
                 model = model,
                 prompt = prompt,
-                stream = false
+                stream = false,
+                system = system,
+                temperature = temperature,
+                numPredict = maxTokens,
+                topP = topP
             )
 
             val requestBody = objectMapper.writeValueAsString(request)

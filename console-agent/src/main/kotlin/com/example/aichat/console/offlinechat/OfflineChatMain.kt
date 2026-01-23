@@ -14,17 +14,30 @@ import kotlinx.coroutines.runBlocking
  * Or if running the JAR directly:
  *   java -jar console-agent.jar
  */
-fun main() {
-    println("🧠 Offline AI Assistant (Qwen2 7B)")
-    println("=" .repeat(50))
-    println("Connecting to Ollama at http://localhost:11434...")
-    println("Model: qwen2:7b-instruct")
-    println("Type 'exit' to quit")
-    println("=" .repeat(50))
+fun main(args: Array<String>) {
+    // Parse configuration from environment or arguments
+    val baseUrl = args.getOrNull(0) 
+        ?: System.getenv("OLLAMA_BASE_URL") 
+        ?: "http://localhost:11434"
+    
+    val model = args.getOrNull(1)
+        ?: System.getenv("OLLAMA_MODEL")
+        ?: "qwen2:7b-instruct"
+    
+    println("🧠 Offline AI Assistant - Vegetarian Recipes")
+    println("=" .repeat(60))
+    println("Server: $baseUrl")
+    println("Model: $model")
+    println("Mode: Vegetarian recipes (eggs, fish, dairy allowed)")
+    println("Type 'help' for commands, 'recipe' for recipe mode, 'exit' to quit")
+    println("=" .repeat(60))
     println()
 
     // Use OkHttp implementation (avoids Ktor dependency issues)
-    val llmClient = LlmClientOkHttp()
+    val llmClient = LlmClientOkHttp(
+        baseUrl = baseUrl,
+        model = model
+    )
 
     runBlocking {
         try {
@@ -57,20 +70,85 @@ fun main() {
 
                     when {
                         input.isNullOrBlank() -> continue
-                        input.equals("exit", ignoreCase = true) -> {
+                        input.equals("exit", ignoreCase = true) || 
+                        input.equals("quit", ignoreCase = true) -> {
                             running = false
                             println("Goodbye! 👋")
                         }
+                        input.equals("help", ignoreCase = true) -> {
+                            println()
+                            println("Available commands:")
+                            println("  help   - Show this help message")
+                            println("  recipe - Generate a vegetarian recipe (optimized mode)")
+                            println("  info   - Show server and model information")
+                            println("  exit   - Exit the chat")
+                            println("  quit   - Exit the chat")
+                            println()
+                            println("Recipe Mode:")
+                            println("  Use 'recipe' command followed by your request")
+                            println("  Example: recipe gluten-free dinner for two")
+                            println()
+                        }
+                        input.equals("info", ignoreCase = true) -> {
+                            println()
+                            println("Server Information:")
+                            println("  URL: $baseUrl")
+                            println("  Model: $model")
+                            println("  Mode: Vegetarian recipes")
+                            println("  Allowed: Eggs, fish, dairy products")
+                            println("  Prohibited: Meat, poultry")
+                            println()
+                        }
+                        input.startsWith("recipe", ignoreCase = true) -> {
+                            // Recipe mode with optimized parameters
+                            val recipeRequest = input.substringAfter("recipe").trim()
+                            if (recipeRequest.isBlank()) {
+                                println("\nUsage: recipe <your request>")
+                                println("Example: recipe gluten-free dinner for two")
+                                continue
+                            }
+                            
+                            try {
+                                print("AI (Recipe Mode): ")
+                                System.out.flush()
+                                val response = llmClient.generate(
+                                    prompt = recipeRequest,
+                                    system = VegetarianRecipePrompt.SYSTEM_PROMPT,
+                                    temperature = VegetarianRecipePrompt.OPTIMAL_TEMPERATURE,
+                                    maxTokens = VegetarianRecipePrompt.OPTIMAL_MAX_TOKENS,
+                                    topP = VegetarianRecipePrompt.OPTIMAL_TOP_P
+                                )
+                                println(response)
+                            } catch (e: Exception) {
+                                val errorMsg = e.message ?: "Unknown error"
+                                if (errorMsg.contains("timeout", ignoreCase = true)) {
+                                    println("\n✗ Request timed out")
+                                    println("  The server may be processing your request, but it's taking too long.")
+                                } else {
+                                    println("\n✗ Error: $errorMsg")
+                                    println("  Check your connection to: $baseUrl")
+                                }
+                            }
+                        }
                         else -> {
-                            // Send to LLM and print response
+                            // Regular chat mode with vegetarian system prompt
                             try {
                                 print("AI: ")
-                                val response = llmClient.generate(input)
+                                System.out.flush()
+                                val response = llmClient.generate(
+                                    prompt = input,
+                                    system = VegetarianRecipePrompt.SYSTEM_PROMPT
+                                )
                                 println(response)
-                                println()
                             } catch (e: Exception) {
-                                println("Error: ${e.message}")
-                                println()
+                                val errorMsg = e.message ?: "Unknown error"
+                                if (errorMsg.contains("timeout", ignoreCase = true)) {
+                                    println("\n✗ Request timed out")
+                                    println("  The server may be processing your request, but it's taking too long.")
+                                } else {
+                                    println("\n✗ Error: $errorMsg")
+                                    println("  Check your connection to: $baseUrl")
+                                }
                             }
                         }
                     }

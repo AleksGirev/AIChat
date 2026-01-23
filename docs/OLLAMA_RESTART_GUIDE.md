@@ -104,7 +104,7 @@ curl http://localhost:11434/api/tags
 sudo systemctl status ollama
 
 # 2. Остановить сервис
-sudo systemctl stop ollama
+
 
 # 3. Отключить автозапуск (чтобы не запускался автоматически)
 sudo systemctl disable ollama
