@@ -1,9 +1,11 @@
 package com.example.aichat.ui.chat
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +34,7 @@ fun ChatScreen(
     onTokenComparisonClick: () -> Unit = {},
     onChatListClick: () -> Unit = {},
     onSearchAgentClick: () -> Unit = {},
+    onDataAnalystClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
@@ -135,40 +138,7 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    // Chat list button
-                    TextButton(onClick = onChatListClick) {
-                        Text("Chats")
-                    }
-                    // Model selector button
-                    TextButton(onClick = { showModelSelector = !showModelSelector }) {
-                        Text("Model")
-                    }
-                    // Token comparison button
-                    TextButton(onClick = onTokenComparisonClick) {
-                        Text("Tokens")
-                    }
-                    // Comparison button
-                    TextButton(onClick = onComparisonClick) {
-                        Text("Compare")
-                    }
-                    // New Chat button
-                    TextButton(
-                        onClick = { viewModel.startNewChat() },
-                        enabled = !isLoading
-                    ) {
-                        Text("New")
-                    }
-                    // Search Agent button
-                    TextButton(onClick = onSearchAgentClick) {
-                        Text("Search")
-                    }
-                    // Support mode toggle
-                    IconButton(
-                        onClick = { viewModel.setSupportMode(!supportMode) }
-                    ) {
-                        Text(if (supportMode) "🛟" else "💬", style = MaterialTheme.typography.titleLarge)
-                    }
-                    // Settings button
+                    // Settings button (keep in top bar)
                     IconButton(onClick = onSettingsClick) {
                         Text("⚙️", style = MaterialTheme.typography.titleLarge)
                     }
@@ -181,6 +151,74 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Scrollable action buttons bar
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Chat list button
+                    FilterChip(
+                        selected = false,
+                        onClick = onChatListClick,
+                        label = { Text("Chats") }
+                    )
+                    // Model selector button
+                    FilterChip(
+                        selected = showModelSelector,
+                        onClick = { showModelSelector = !showModelSelector },
+                        label = { Text("Model") }
+                    )
+                    // Token comparison button
+                    FilterChip(
+                        selected = false,
+                        onClick = onTokenComparisonClick,
+                        label = { Text("Tokens") }
+                    )
+                    // Comparison button
+                    FilterChip(
+                        selected = false,
+                        onClick = onComparisonClick,
+                        label = { Text("Compare") }
+                    )
+                    // New Chat button
+                    FilterChip(
+                        selected = false,
+                        onClick = { viewModel.startNewChat() },
+                        enabled = !isLoading,
+                        label = { Text("New") }
+                    )
+                    // Search Agent button
+                    FilterChip(
+                        selected = false,
+                        onClick = onSearchAgentClick,
+                        label = { Text("Search") }
+                    )
+                    // Data Analyst button
+                    FilterChip(
+                        selected = false,
+                        onClick = onDataAnalystClick,
+                        label = { Text("Analyst") }
+                    )
+                    // Support mode toggle
+                    FilterChip(
+                        selected = supportMode,
+                        onClick = { viewModel.setSupportMode(!supportMode) },
+                        label = { Text(if (supportMode) "🛟 Support" else "💬 Chat") }
+                    )
+                }
+            }
+            
             // Model selector dropdown
             if (showModelSelector) {
                 Card(

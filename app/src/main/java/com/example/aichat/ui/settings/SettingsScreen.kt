@@ -8,10 +8,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.aichat.data.api.OllamaHealthService
 import com.example.aichat.service.WeatherService
 import com.example.aichat.ui.viewmodel.ChatViewModel
 import kotlinx.coroutines.launch
@@ -33,9 +35,31 @@ fun SettingsScreen(
     
     // Inject dependencies via Koin
     val weatherService: WeatherService = koinInject()
+    val ollamaHealthService: OllamaHealthService = koinInject()
     
     // Coroutine scope for async operations
     val scope = rememberCoroutineScope()
+    
+    // Ollama health check state
+    var ollamaHealthStatus by remember { mutableStateOf<OllamaHealthService.HealthStatus?>(null) }
+    var isCheckingOllama by remember { mutableStateOf(false) }
+    
+    // Auto-check Ollama on screen open
+    LaunchedEffect(Unit) {
+        scope.launch {
+            isCheckingOllama = true
+            try {
+                ollamaHealthStatus = ollamaHealthService.checkHealth("qwen2:7b")
+            } catch (e: Exception) {
+                ollamaHealthStatus = OllamaHealthService.HealthStatus(
+                    isServerAvailable = false,
+                    errorMessage = "Ошибка проверки: ${e.message}"
+                )
+            } finally {
+                isCheckingOllama = false
+            }
+        }
+    }
     
     val temperature by viewModel.temperature.collectAsStateWithLifecycle()
     val systemPrompt by viewModel.systemPrompt.collectAsStateWithLifecycle()
@@ -69,6 +93,129 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // Ollama Health Check Section
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Проверка Ollama",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    
+                    Text(
+                        text = "Проверьте доступность локального Ollama сервера и модели",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Button(
+                        onClick = {
+                            isCheckingOllama = true
+                            scope.launch {
+                                try {
+                                    ollamaHealthStatus = ollamaHealthService.checkHealth("qwen2:7b")
+                                } catch (e: Exception) {
+                                    ollamaHealthStatus = OllamaHealthService.HealthStatus(
+                                        isServerAvailable = false,
+                                        errorMessage = "Ошибка проверки: ${e.message}"
+                                    )
+                                } finally {
+                                    isCheckingOllama = false
+                                }
+                            }
+                        },
+                        enabled = !isCheckingOllama,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isCheckingOllama) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(if (isCheckingOllama) "Проверка..." else "Проверить Ollama")
+                    }
+                    
+                    // Display health status
+                    ollamaHealthStatus?.let { status ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Server status
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (status.isServerAvailable) "✅" else "❌",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Сервер: ${if (status.isServerAvailable) "Доступен" else "Недоступен"}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                status.serverVersion?.let {
+                                    Text(
+                                        text = "Версия: $it",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Model status
+                        if (status.isServerAvailable) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (status.isModelAvailable) "✅" else "⚠️",
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Модель qwen2:7b: ${if (status.isModelAvailable) "Доступна" else "Не найдена"}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (status.availableModels.isNotEmpty()) {
+                                        Text(
+                                            text = "Доступные модели: ${status.availableModels.joinToString(", ")}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Error message
+                        status.errorMessage?.let { error ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+            
             // Weather Summary Section
             Card(
                 modifier = Modifier.fillMaxWidth()

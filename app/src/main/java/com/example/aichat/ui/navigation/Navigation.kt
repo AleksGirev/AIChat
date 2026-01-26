@@ -11,6 +11,7 @@ import com.example.aichat.data.auth.AuthManager
 import com.example.aichat.ui.auth.AuthScreen
 import com.example.aichat.ui.chat.ChatScreen
 import com.example.aichat.ui.chat.ChatListScreen
+import com.example.aichat.ui.analyst.DataAnalystScreen
 import com.example.aichat.ui.comparison.ModelComparisonScreen
 import com.example.aichat.ui.comparison.TokenComparisonScreen
 import com.example.aichat.ui.searchagent.SearchAgentScreen
@@ -35,6 +36,7 @@ sealed class Screen {
     object TokenComparison : Screen()
     object WeatherSummary : Screen()
     object SearchAgent : Screen()
+    object DataAnalyst : Screen()
 }
 
 /**
@@ -83,7 +85,8 @@ fun AppNavigation(
                 onComparisonClick = { currentScreen = Screen.ModelComparison },
                 onTokenComparisonClick = { currentScreen = Screen.TokenComparison },
                 onChatListClick = { currentScreen = Screen.ChatList },
-                onSearchAgentClick = { currentScreen = Screen.SearchAgent }
+                onSearchAgentClick = { currentScreen = Screen.SearchAgent },
+                onDataAnalystClick = { currentScreen = Screen.DataAnalyst }
             )
         }
         is Screen.ChatList -> {
@@ -126,6 +129,13 @@ fun AppNavigation(
             val searchAgentViewModel: com.example.aichat.ui.searchagent.SearchAgentViewModel = koinViewModel()
             SearchAgentScreen(
                 viewModel = searchAgentViewModel,
+                onBackClick = { currentScreen = Screen.Chat }
+            )
+        }
+        is Screen.DataAnalyst -> {
+            val dataAnalystViewModel: com.example.aichat.ui.analyst.DataAnalystViewModel = koinViewModel()
+            DataAnalystScreen(
+                viewModel = dataAnalystViewModel,
                 onBackClick = { currentScreen = Screen.Chat }
             )
         }

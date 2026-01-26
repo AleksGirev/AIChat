@@ -4,7 +4,9 @@ import android.app.Application
 import android.util.Log
 import com.example.aichat.data.brightdata.BrightDataMcpClient
 import com.example.aichat.data.crm.CrmMcpClient
+import com.example.aichat.data.local.AppLogRepository
 import com.example.aichat.data.rag.RagService
+import com.example.aichat.data.util.LogInterceptor
 import com.example.aichat.di.allModules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +47,9 @@ class AIChatApplication : Application() {
         // Initialize Koin dependency injection
         initializeKoin()
         
+        // Initialize log interceptor for automatic log saving
+        initializeLogInterceptor()
+        
         // Initialize BrightData MCP server and log available tools
         initializeBrightDataMcp()
         
@@ -77,6 +82,21 @@ class AIChatApplication : Application() {
         }
         
         Log.d(TAG, "Koin initialized")
+    }
+    
+    /**
+     * Initializes log interceptor for automatic log saving to database.
+     */
+    private fun initializeLogInterceptor() {
+        applicationScope.launch {
+            try {
+                val appLogRepository: AppLogRepository = GlobalContext.get().get()
+                LogInterceptor.initialize(appLogRepository)
+                Log.d(TAG, "Log interceptor initialized - logs will be saved to database")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize log interceptor", e)
+            }
+        }
     }
     
     /**

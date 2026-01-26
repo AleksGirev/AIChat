@@ -18,10 +18,16 @@ import com.example.aichat.data.network.NetworkModule
 import com.example.aichat.data.repository.ChatRepository
 import com.example.aichat.data.brightdata.BrightDataMcpClient
 import com.example.aichat.data.rag.RagService
+import com.example.aichat.data.analyst.DataAnalystRepository
+import com.example.aichat.data.analyst.DataLoader
+import com.example.aichat.data.analyst.DataParser
+import com.example.aichat.data.api.OllamaHealthService
+import com.example.aichat.data.local.AnalystSettingsManager
 import com.example.aichat.data.search.McpSearchClient
 import com.example.aichat.data.search.SearchAgentRepository
 import com.example.aichat.data.support.SupportContextBuilder
 import com.example.aichat.service.WeatherService
+import com.example.aichat.ui.analyst.DataAnalystViewModel
 import com.example.aichat.ui.searchagent.SearchAgentViewModel
 import com.example.aichat.ui.viewmodel.AuthViewModel
 import com.example.aichat.ui.viewmodel.ChatViewModel
@@ -112,6 +118,7 @@ val appModule = module {
     single { get<ChatDatabase>().externalMemoryDao() }
     single { get<ChatDatabase>().weatherDao() }
     single { get<ChatDatabase>().userDao() }
+    single { get<ChatDatabase>().appLogDao() }
     
     // ==================== MCP Dependencies ====================
     
@@ -239,6 +246,18 @@ val appModule = module {
     single { UserRepository(get()) }
     
     /**
+     * App Log Repository
+     * Singleton: Manages application logs persistence
+     */
+    single { com.example.aichat.data.local.AppLogRepository(get()) }
+    
+    /**
+     * Analyst Settings Manager
+     * Singleton: Manages analyst settings (use app logs preference)
+     */
+    single { AnalystSettingsManager(androidContext()) }
+    
+    /**
      * Auth Manager
      * Singleton: Manages authentication state with EncryptedSharedPreferences
      */
@@ -286,6 +305,44 @@ val appModule = module {
         )
     }
     
+    // ==================== Data Analyst Dependencies ====================
+    
+    /**
+     * Data Loader
+     * Singleton: Loads data from files (CSV, JSON, logs)
+     */
+    single { DataLoader(androidContext()) }
+    
+    /**
+     * Data Parser
+     * Singleton: Parses loaded data into structured format
+     */
+    single { DataParser(get()) }
+    
+    /**
+     * Ollama Health Service
+     * Singleton: Checks Ollama server and model availability
+     */
+    single {
+        OllamaHealthService(
+            httpClient = get(),
+            gson = get()
+        )
+    }
+    
+    /**
+     * Data Analyst Repository
+     * Singleton: Analyzes data using local LLM
+     */
+    single {
+        DataAnalystRepository(
+            localLLMApiService = get(),
+            dataParser = get(),
+            appLogRepository = get(),
+            gson = get()
+        )
+    }
+    
     // ==================== ViewModels ====================
     
     /**
@@ -330,6 +387,22 @@ val appModule = module {
             application = androidApplication(),
             userRepository = get(),
             authManager = get()
+        )
+    }
+    
+    /**
+     * Data Analyst ViewModel
+     * Scoped to Activity lifecycle
+     * 
+     * Manages UI state for data analysis functionality
+     */
+    viewModel {
+        DataAnalystViewModel(
+            dataLoader = get(),
+            dataParser = get(),
+            repository = get(),
+            appLogRepository = get(),
+            settingsManager = get()
         )
     }
 }
