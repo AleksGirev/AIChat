@@ -35,6 +35,7 @@ fun ChatScreen(
     onChatListClick: () -> Unit = {},
     onSearchAgentClick: () -> Unit = {},
     onDataAnalystClick: () -> Unit = {},
+    onVoiceAgentClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
@@ -209,6 +210,12 @@ fun ChatScreen(
                         selected = false,
                         onClick = onDataAnalystClick,
                         label = { Text("Analyst") }
+                    )
+                    // Voice Agent button
+                    FilterChip(
+                        selected = false,
+                        onClick = onVoiceAgentClick,
+                        label = { Text("🎤 Voice") }
                     )
                     // Support mode toggle
                     FilterChip(

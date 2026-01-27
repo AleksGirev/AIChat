@@ -38,6 +38,10 @@ dependencies {
     
     // SQLite JDBC driver (using stable version to avoid StackOverflowError)
     implementation("org.xerial:sqlite-jdbc:3.43.2.2")
+    
+    // Vosk for offline speech recognition
+    // Note: Version 0.3.45 has issues on macOS, using 0.3.38 which is more stable
+    implementation("com.alphacephei:vosk:0.3.38")
 }
 
 application {

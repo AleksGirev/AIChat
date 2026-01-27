@@ -17,10 +17,12 @@ import com.example.aichat.ui.comparison.TokenComparisonScreen
 import com.example.aichat.ui.searchagent.SearchAgentScreen
 import com.example.aichat.ui.settings.SettingsScreen
 import com.example.aichat.ui.summary.WeatherSummaryScreen
+import com.example.aichat.ui.voiceagent.VoiceAgentScreen
 import com.example.aichat.ui.viewmodel.AuthViewModel
 import com.example.aichat.ui.viewmodel.ChatViewModel
 import com.example.aichat.ui.viewmodel.ModelComparisonViewModel
 import com.example.aichat.ui.viewmodel.TokenComparisonViewModel
+import com.example.aichat.ui.viewmodel.VoiceAgentViewModel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -37,6 +39,7 @@ sealed class Screen {
     object WeatherSummary : Screen()
     object SearchAgent : Screen()
     object DataAnalyst : Screen()
+    object VoiceAgent : Screen()
 }
 
 /**
@@ -86,7 +89,8 @@ fun AppNavigation(
                 onTokenComparisonClick = { currentScreen = Screen.TokenComparison },
                 onChatListClick = { currentScreen = Screen.ChatList },
                 onSearchAgentClick = { currentScreen = Screen.SearchAgent },
-                onDataAnalystClick = { currentScreen = Screen.DataAnalyst }
+                onDataAnalystClick = { currentScreen = Screen.DataAnalyst },
+                onVoiceAgentClick = { currentScreen = Screen.VoiceAgent }
             )
         }
         is Screen.ChatList -> {
@@ -136,6 +140,13 @@ fun AppNavigation(
             val dataAnalystViewModel: com.example.aichat.ui.analyst.DataAnalystViewModel = koinViewModel()
             DataAnalystScreen(
                 viewModel = dataAnalystViewModel,
+                onBackClick = { currentScreen = Screen.Chat }
+            )
+        }
+        is Screen.VoiceAgent -> {
+            val voiceAgentViewModel: VoiceAgentViewModel = viewModel()
+            VoiceAgentScreen(
+                viewModel = voiceAgentViewModel,
                 onBackClick = { currentScreen = Screen.Chat }
             )
         }

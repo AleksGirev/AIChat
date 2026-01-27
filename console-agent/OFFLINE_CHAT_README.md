@@ -6,6 +6,7 @@ A simple command-line interface for chatting with a local LLM (Large Language Mo
 
 - ✅ **100% Offline**: No internet required after model download
 - ✅ **Simple REPL**: Clean, interactive chat interface
+- ✅ **Voice Input**: Speech recognition support (see [VOICE_RECOGNITION_README.md](VOICE_RECOGNITION_README.md))
 - ✅ **Lightweight**: Minimal dependencies (Ktor + Jackson)
 - ✅ **Fast**: Direct communication with local Ollama instance
 
@@ -66,6 +67,11 @@ Type 'exit' to quit
 
 You: What is Kotlin?
 AI: Kotlin is a statically typed programming language...
+
+You: voice
+🎤 Recording... (speak now, 5 seconds)
+✓ Recognized: tell me a joke
+AI: [AI tells a joke]
 
 You: exit
 Goodbye! 👋
@@ -140,8 +146,18 @@ ollama pull qwen2:7b-instruct
 - **OkHttp**: HTTP client for API calls (already in project)
 - **Jackson**: JSON serialization/deserialization
 - **Kotlin Coroutines**: Async/await support
+- **Vosk**: Offline speech recognition (optional, for voice input)
 
 Note: The implementation uses OkHttp directly instead of Ktor to avoid dependency resolution issues while maintaining the same functionality.
+
+## Voice Input
+
+The agent supports voice input through the `voice` command. See [VOICE_RECOGNITION_README.md](VOICE_RECOGNITION_README.md) for detailed setup instructions.
+
+Quick start:
+1. Install audio recording tools (Linux: `alsa-utils sox`, macOS: `brew install sox`)
+2. Optionally download Vosk model for offline recognition
+3. Use `voice` command in the chat
 
 ## License
 

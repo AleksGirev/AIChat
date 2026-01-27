@@ -1,6 +1,10 @@
 package com.example.aichat.console.offlinechat
 
+import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 /**
  * Main entry point for the Offline AI Chat CLI.
@@ -29,9 +33,35 @@ fun main(args: Array<String>) {
     println("Server: $baseUrl")
     println("Model: $model")
     println("Mode: Vegetarian recipes (eggs, fish, dairy allowed)")
-    println("Type 'help' for commands, 'recipe' for recipe mode, 'exit' to quit")
+    println("Type 'help' for commands, 'recipe' for recipe mode, 'voice' for voice input, 'exit' to quit")
     println("=" .repeat(60))
     println()
+
+    // Initialize speech recognition service
+    // Try to find Vosk model: first check env var, then check workspace directory
+    val voskModelPath = System.getenv("VOSK_MODEL_PATH") 
+        ?: run {
+            // Check if model exists in workspace vosk-models directory
+            // Try multiple possible locations (relative to project root or current dir)
+            val possiblePaths = listOf(
+                File("vosk-models/vosk-model-small-ru-0.22"),
+                File("../vosk-models/vosk-model-small-ru-0.22"),
+                File("../../vosk-models/vosk-model-small-ru-0.22")
+            )
+            
+            possiblePaths.firstOrNull { it.exists() && it.isDirectory }?.absolutePath
+        }
+    
+    val speechService = SpeechRecognitionService(modelPath = voskModelPath)
+    val speechAvailable = speechService.isAvailable()
+    
+    if (voskModelPath != null) {
+        println("✓ Vosk model found: $voskModelPath")
+    } else {
+        println("⚠ Vosk model not found - voice recognition will be limited")
+        println("  Download model: https://alphacephei.com/vosk/models")
+        println("  Set VOSK_MODEL_PATH or place model in vosk-models/ directory")
+    }
 
     // Use OkHttp implementation (avoids Ktor dependency issues)
     val llmClient = LlmClientOkHttp(
@@ -80,6 +110,7 @@ fun main(args: Array<String>) {
                             println("Available commands:")
                             println("  help   - Show this help message")
                             println("  recipe - Generate a vegetarian recipe (optimized mode)")
+                            println("  voice  - Record and recognize speech input")
                             println("  info   - Show server and model information")
                             println("  exit   - Exit the chat")
                             println("  quit   - Exit the chat")
@@ -88,6 +119,18 @@ fun main(args: Array<String>) {
                             println("  Use 'recipe' command followed by your request")
                             println("  Example: recipe gluten-free dinner for two")
                             println()
+                            if (speechAvailable) {
+                                println("Voice Mode:")
+                                println("  Use 'voice' command to record and recognize speech")
+                                println("  Example: voice (then speak your question)")
+                                println()
+                            } else {
+                                println("Voice Mode:")
+                                println("  Not available - install audio recording tools:")
+                                println("    Linux: sudo apt-get install alsa-utils sox")
+                                println("    macOS: brew install sox")
+                                println()
+                            }
                         }
                         input.equals("info", ignoreCase = true) -> {
                             println()
@@ -98,6 +141,113 @@ fun main(args: Array<String>) {
                             println("  Allowed: Eggs, fish, dairy products")
                             println("  Prohibited: Meat, poultry")
                             println()
+                        }
+                        input.equals("voice", ignoreCase = true) -> {
+                            if (!speechAvailable) {
+                                println("\n✗ Speech recognition is not available")
+                                println("  Install audio recording tools:")
+                                println("    Linux: sudo apt-get install alsa-utils sox")
+                                println("    macOS: brew install sox")
+                                println("  For offline recognition, download Vosk model:")
+                                println("    https://alphacephei.com/vosk/models")
+                                println("    Set VOSK_MODEL_PATH environment variable")
+                                continue
+                            }
+                            
+                            try {
+                                println("\n🎤 Recording... (speak now, 5 seconds)")
+                                println("   (Press Ctrl+C to cancel)")
+                                
+                                val recognizedText = runBlocking {
+                                    withContext(Dispatchers.IO) {
+                                        try {
+                                            speechService.recordAndRecognize(durationSeconds = 5)
+                                        } catch (e: UnsupportedOperationException) {
+                                            // Vosk model not available, use simple approach
+                                            println("\n⚠ Offline recognition requires Vosk model")
+                                            println("  Download from: https://alphacephei.com/vosk/models")
+                                            println("  Set VOSK_MODEL_PATH environment variable")
+                                            println("\n  For now, please type your message instead.")
+                                            return@withContext null
+                                        } catch (e: IOException) {
+                                            val errorMsg = e.message ?: "Unknown error"
+                                            if (errorMsg.contains("UnsatisfiedLinkError") || errorMsg.contains("native library")) {
+                                                println("\n✗ Vosk native library error on macOS")
+                                                println("  This is a known issue. See VOSK_TROUBLESHOOTING.md for solutions.")
+                                                println("  Quick fix: Try Python Vosk or use online services.")
+                                                println("  Error: ${e.message}")
+                                            } else {
+                                                println("\n✗ Error recording/recognizing: $errorMsg")
+                                            }
+                                            return@withContext null
+                                        } catch (e: Exception) {
+                                            println("\n✗ Error recording/recognizing: ${e.message}")
+                                            return@withContext null
+                                        }
+                                    }
+                                }
+                                
+                                if (recognizedText == null) {
+                                    continue
+                                }
+                                
+                                println("✓ Recognized: $recognizedText")
+                                println()
+                                
+                                // Process recognized text as if it was typed
+                                val voiceInput = recognizedText
+                                
+                                // Use recognized text as input
+                                if (voiceInput.startsWith("recipe", ignoreCase = true)) {
+                                    // Recipe mode
+                                    val recipeRequest = voiceInput.substringAfter("recipe").trim()
+                                    if (recipeRequest.isBlank()) {
+                                        println("Usage: say 'recipe' followed by your request")
+                                        continue
+                                    }
+                                    
+                                    try {
+                                        print("AI (Recipe Mode): ")
+                                        System.out.flush()
+                                        val response = llmClient.generate(
+                                            prompt = recipeRequest,
+                                            system = VegetarianRecipePrompt.SYSTEM_PROMPT,
+                                            temperature = VegetarianRecipePrompt.OPTIMAL_TEMPERATURE,
+                                            maxTokens = VegetarianRecipePrompt.OPTIMAL_MAX_TOKENS,
+                                            topP = VegetarianRecipePrompt.OPTIMAL_TOP_P
+                                        )
+                                        println(response)
+                                    } catch (e: Exception) {
+                                        val errorMsg = e.message ?: "Unknown error"
+                                        if (errorMsg.contains("timeout", ignoreCase = true)) {
+                                            println("\n✗ Request timed out")
+                                        } else {
+                                            println("\n✗ Error: $errorMsg")
+                                        }
+                                    }
+                                } else {
+                                    // Regular chat mode
+                                    try {
+                                        print("AI: ")
+                                        System.out.flush()
+                                        val response = llmClient.generate(
+                                            prompt = voiceInput,
+                                            system = VegetarianRecipePrompt.SYSTEM_PROMPT
+                                        )
+                                        println(response)
+                                    } catch (e: Exception) {
+                                        val errorMsg = e.message ?: "Unknown error"
+                                        if (errorMsg.contains("timeout", ignoreCase = true)) {
+                                            println("\n✗ Request timed out")
+                                        } else {
+                                            println("\n✗ Error: $errorMsg")
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                println("\n✗ Error: ${e.message}")
+                                println("  Make sure microphone is connected and working")
+                            }
                         }
                         input.startsWith("recipe", ignoreCase = true) -> {
                             // Recipe mode with optimized parameters
@@ -159,6 +309,7 @@ fun main(args: Array<String>) {
             }
         } finally {
             llmClient.close()
+            speechService.cleanup()
         }
     }
 }
