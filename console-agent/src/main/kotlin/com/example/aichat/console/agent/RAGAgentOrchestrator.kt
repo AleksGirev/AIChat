@@ -1,5 +1,6 @@
 package com.example.aichat.console.agent
 
+import com.example.aichat.console.PersonalConfig
 import com.example.aichat.console.llm.OpenAiClient
 import com.example.aichat.console.mcp.McpClientWrapper
 import com.example.aichat.console.model.ChatMessage
@@ -331,10 +332,15 @@ class RAGAgentOrchestrator(
     }
     
     /**
-     * Creates system message with RAG instructions
+     * Creates system message with RAG instructions and personal context
      */
     private fun createSystemMessage(): ChatMessage {
         val stats = ragPipeline.getStats()
+        val personalContext = if (PersonalConfig.isConfigured()) {
+            "\n\n${PersonalConfig.formatPersonalContext()}\n"
+        } else {
+            "\n\n[Note: Personal information is not configured. The user can fill PersonalConfig.kt with their information for personalized responses.]\n"
+        }
         
         val systemPrompt = buildString {
             if (ragEnabled) {
@@ -357,9 +363,19 @@ class RAGAgentOrchestrator(
             }
             
             appendLine("Always respond in the same language as the user's question.")
+            append(personalContext)
+            if (PersonalConfig.isConfigured()) {
+                appendLine()
+                appendLine("IMPORTANT: Use the personal information above for ALL your responses.")
+                appendLine("- When answering questions, consider the user's role, interests, goals, and current projects.")
+                appendLine("- Adapt your communication style to match: ${PersonalConfig.communicationStyle}")
+                appendLine("- Provide personalized suggestions based on the user's preferences and work style.")
+                appendLine("- When using RAG context, combine it with the user's personal context to provide more relevant answers.")
+                appendLine("- You can help with learning plans, project planning, code reviews, and any other questions.")
+            }
         }
         
-        return ChatMessage(role = "system", content = systemPrompt)
+        return ChatMessage(role = "system", content = systemPrompt.trim())
     }
     
     /**

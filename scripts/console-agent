@@ -6,6 +6,7 @@
 # Commands:
 #   remote    - Run Remote AI Chat (default)
 #   offline   - Run Offline AI Chat
+#   personal  - Run Personal Agent (with Ollama and personalization)
 #   help      - Show this help message
 
 # Get the directory where this script is located (handle symlinks)
@@ -70,6 +71,12 @@ case "$COMMAND" in
         exec ./gradlew :console-agent:runOfflineChat "$@" --console=plain
         ;;
     
+    personal|p)
+        shift
+        # Run Personal Agent with Ollama and personalization
+        exec ./gradlew :console-agent:runPersonalAgent "$@" --console=plain
+        ;;
+    
     help|h|--help|-h)
         cat <<EOF
 Console Agent - AI Chat CLI Launcher
@@ -79,12 +86,14 @@ Usage: console-agent [command] [options]
 Commands:
   remote, r     Run Remote AI Chat (connects to remote Ollama server)
   offline, o    Run Offline AI Chat (connects to local Ollama)
+  personal, p  Run Personal Agent (local Ollama + personalization from PersonalConfig)
   help, h       Show this help message
 
 Examples:
   console-agent                    # Run remote chat (default)
   console-agent remote             # Run remote chat explicitly
   console-agent offline            # Run offline chat
+  console-agent personal           # Run personal agent with local Ollama
   
 Environment Variables:
   OLLAMA_BASE_URL    Remote Ollama server URL (default: http://193.42.127.171:11434)

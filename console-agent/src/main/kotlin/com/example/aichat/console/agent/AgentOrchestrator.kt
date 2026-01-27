@@ -1,5 +1,6 @@
 package com.example.aichat.console.agent
 
+import com.example.aichat.console.PersonalConfig
 import com.example.aichat.console.llm.OpenAiClient
 import com.example.aichat.console.mcp.McpClientWrapper
 import com.example.aichat.console.model.*
@@ -179,37 +180,65 @@ class AgentOrchestrator(
     }
     
     /**
-     * Creates system message with tool descriptions
+     * Creates system message with tool descriptions and personal context
      */
     private fun createSystemMessage(tools: List<com.example.aichat.console.model.McpTool>): ChatMessage {
+        val isConfigured = PersonalConfig.isConfigured()
+        val personalContext = if (isConfigured) {
+            val formatted = PersonalConfig.formatPersonalContext()
+            println("[Personalization]: ✓ Adding personal context to system prompt (${formatted.length} chars)")
+            "\n\n$formatted\n"
+        } else {
+            println("[Personalization]: ⚠ Personal context not configured, skipping")
+            "\n\n[Note: Personal information is not configured. The user can fill PersonalConfig.kt with their information for personalized responses.]\n"
+        }
+        
         val systemPrompt = if (tools.isEmpty()) {
             // No tools available - simple chat mode
-            """
-            You are a helpful AI assistant.
-            Respond to user questions and requests in a clear and helpful manner.
-            Respond in the same language as the user's command.
-            """.trimIndent()
+            buildString {
+                appendLine("You are a helpful AI assistant.")
+                appendLine("Respond to user questions and requests in a clear and helpful manner.")
+                appendLine("Respond in the same language as the user's command.")
+                append(personalContext)
+                if (PersonalConfig.isConfigured()) {
+                    appendLine()
+                    appendLine("IMPORTANT: Use the personal information above for ALL your responses.")
+                    appendLine("- When answering questions, consider the user's role, interests, goals, and current projects.")
+                    appendLine("- Adapt your communication style to match: ${PersonalConfig.communicationStyle}")
+                    appendLine("- Provide personalized suggestions based on the user's preferences and work style.")
+                    appendLine("- You can help with learning plans, project planning, code reviews, and any other questions.")
+                }
+            }
         } else {
             val toolsDescription = tools.joinToString("\n") { tool ->
                 "- ${tool.name}: ${tool.description ?: "No description"}"
             }
             
-            """
-            You are an AI assistant that controls mobile devices through MCP (Model Context Protocol) tools.
-            You can execute commands on connected Android/iOS devices or emulators.
-            
-            Available tools:
-            $toolsDescription
-            
-            When the user gives you a natural language command, analyze it and use the appropriate tools to execute it.
-            You can chain multiple tool calls if needed to complete the task.
-            Always provide clear feedback about what you're doing.
-            
-            Respond in the same language as the user's command.
-            """.trimIndent()
+            buildString {
+                appendLine("You are a helpful AI assistant.")
+                appendLine()
+                appendLine("You have access to mobile device control tools through MCP (Model Context Protocol).")
+                appendLine("When the user asks about mobile device operations, you can use these tools:")
+                appendLine(toolsDescription)
+                appendLine()
+                appendLine("However, you are NOT limited to mobile device topics. You can answer ANY questions,")
+                appendLine("provide advice, help with programming, learning plans, and general assistance.")
+                appendLine()
+                appendLine("Respond in the same language as the user's command.")
+                append(personalContext)
+                if (PersonalConfig.isConfigured()) {
+                    appendLine()
+                    appendLine("IMPORTANT: Use the personal information above for ALL your responses.")
+                    appendLine("- When answering questions, consider the user's role, interests, goals, and current projects.")
+                    appendLine("- Adapt your communication style to match: ${PersonalConfig.communicationStyle}")
+                    appendLine("- Provide personalized suggestions based on the user's preferences and work style.")
+                    appendLine("- You can help with learning plans, project planning, code reviews, and any other questions.")
+                    appendLine("- The mobile device tools are optional - use them only when relevant to the user's request.")
+                }
+            }
         }
         
-        return ChatMessage(role = "system", content = systemPrompt)
+        return ChatMessage(role = "system", content = systemPrompt.trim())
     }
     
     /**

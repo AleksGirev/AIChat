@@ -152,6 +152,28 @@ tasks.register<JavaExec>("runRemoteChat") {
     } ?: emptyList()
 }
 
+// Task for running Personal Agent (with Ollama by default)
+tasks.register<JavaExec>("runPersonalAgent") {
+    group = "application"
+    description = "Run Personal AI Agent with local Ollama LLM and personalization"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.aichat.console.PersonalAgentMainKt")
+    standardInput = System.`in`
+    standardOutput = System.out
+    
+    // Pass environment variables to the process (if not set, use defaults)
+    val ollamaUrl = System.getenv("OLLAMA_BASE_URL") ?: "http://localhost:11434"
+    val ollamaModel = System.getenv("OLLAMA_MODEL") ?: "qwen2:7b-instruct"
+    
+    environment("OLLAMA_BASE_URL", ollamaUrl)
+    environment("OLLAMA_MODEL", ollamaModel)
+    
+    // Parse arguments from command line if provided
+    args = project.findProperty("personalagent.args")?.toString()?.let { argString ->
+        parseCommandLineArgs(argString)
+    } ?: emptyList()
+}
+
 // Task for running Ollama diagnostics
 tasks.register<JavaExec>("runOllamaDiagnostics") {
     group = "application"

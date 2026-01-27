@@ -59,8 +59,12 @@ class OpenAiClient(
             
             val requestBuilder = Request.Builder()
                 .url("$baseUrl/chat/completions")
-                .header("Authorization", "Bearer $apiKey")
                 .header("Content-Type", "application/json")
+            
+            // Add Authorization header only if apiKey is not "ollama" (Ollama doesn't require auth)
+            if (apiKey != "ollama" && apiKey.isNotBlank()) {
+                requestBuilder.header("Authorization", "Bearer $apiKey")
+            }
             
             // Add x-folder-id header for YandexGPT
             folderId?.let {

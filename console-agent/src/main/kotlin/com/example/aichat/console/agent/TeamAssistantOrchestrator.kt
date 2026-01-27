@@ -1,5 +1,6 @@
 package com.example.aichat.console.agent
 
+import com.example.aichat.console.PersonalConfig
 import com.example.aichat.console.llm.OpenAiClient
 import com.example.aichat.console.mcp.McpClientWrapper
 import com.example.aichat.console.model.ChatMessage
@@ -274,11 +275,11 @@ class TeamAssistantOrchestrator(
     }
     
     /**
-     * Creates system message with team assistant prompt
+     * Creates system message with team assistant prompt and personal context
      */
     private fun createSystemMessage(): ChatMessage {
         // Try to load prompt from file
-        val promptContent = try {
+        val basePromptContent = try {
             val possiblePaths = listOf(
                 File("console-agent/$promptFilePath"),
                 File(promptFilePath),
@@ -309,7 +310,28 @@ class TeamAssistantOrchestrator(
             getDefaultPrompt()
         }
         
-        return ChatMessage(role = "system", content = promptContent)
+        // Add personal context to the prompt
+        val personalContext = if (PersonalConfig.isConfigured()) {
+            "\n\n${PersonalConfig.formatPersonalContext()}\n"
+        } else {
+            "\n\n[Note: Personal information is not configured. The user can fill PersonalConfig.kt with their information for personalized responses.]\n"
+        }
+        
+        val enhancedPrompt = buildString {
+            appendLine(basePromptContent)
+            append(personalContext)
+            if (PersonalConfig.isConfigured()) {
+                appendLine()
+                appendLine("IMPORTANT: Use the personal information above for ALL your responses.")
+                appendLine("- When answering questions, consider the user's role, interests, goals, and current projects.")
+                appendLine("- Adapt your communication style to match: ${PersonalConfig.communicationStyle}")
+                appendLine("- Provide personalized suggestions based on the user's preferences and work style.")
+                appendLine("- When suggesting tasks or priorities, consider the user's goals, current projects, and work habits.")
+                appendLine("- You can help with learning plans, project planning, code reviews, and any other questions.")
+            }
+        }
+        
+        return ChatMessage(role = "system", content = enhancedPrompt.trim())
     }
     
     /**
